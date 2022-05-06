@@ -104,6 +104,8 @@ func main() {
 		var b []byte = make([]byte, 5)
 		rand.Read(b)
 
+		// TODO: check for collisions
+
 		res := struct {
 			ID string `json:"id"`
 		}{
@@ -178,6 +180,39 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(rvm)
+	})
+
+	mux.HandleFunc("/documents/view/", func(w http.ResponseWriter, r *http.Request) {
+		var docid int64
+		parts := strings.Split(r.URL.Path, "/")
+		if len(parts) <= 3 {
+			fmt.Fprintf(w, "Parts: %v", parts)
+			w.WriteHeader(404)
+			return
+		}
+		_, err := fmt.Sscanf(parts[3], "g%010x", &docid)
+		if err != nil {
+			w.WriteHeader(404)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		file_path := path.Join("doc", fmt.Sprintf("g%010x", docid), "document.bin")
+		f, err := os.Open(file_path)
+		if err != nil {
+			w.WriteHeader(404)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		w.Header().Set("Content-Security-Policy", "default-src: 'none'; img-src: data: 'self'; style-src: 'unsafe-inline' 'self'")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+		fi, err := f.Stat()
+		if err == nil {
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+		}
+		io.Copy(w, f)
 	})
 
 	srv := &http.Server{
