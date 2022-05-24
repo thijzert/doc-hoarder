@@ -1,0 +1,23 @@
+{
+	"manifest_version": 2,
+	"name": "Doc hoarder",
+	"version": "0.1",
+
+	"description": "Archive the internet before it's too late",
+	"homepage_url": "https://github.com/thijzert/doc-hoarder",
+	"icons": {
+		"48": "icons/librarian-48.png",
+		"96": "icons/librarian-96.png"
+	},
+
+	"permissions": [
+		"https://xxxxxxxxxxxxxxxxxxxxxxxx/*",
+		"activeTab"
+	],
+	
+	"browser_action": {
+		"default_icon": "icons/librarian-48.png",
+		"default_title": "Hoard",
+		"default_popup": "popup/hoard.html"
+	}
+}
