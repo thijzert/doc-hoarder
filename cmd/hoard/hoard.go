@@ -179,6 +179,63 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(rvm)
 	})
+	mux.HandleFunc("/api/new-attachment", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		key := r.FormValue("api_key")
+		if len(key) < 32 {
+			w.WriteHeader(401)
+			return
+		}
+		// TODO: check API key
+
+		draft_id := strings.ToLower(r.FormValue("doc_id"))
+		_, err := hex.DecodeString(draft_id)
+		if err != nil || len(draft_id) != 10 {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
+			return
+		}
+		// TODO: check that the document has draft status, and that it's yours
+
+		ext := strings.ToLower(r.FormValue("ext"))
+		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "Invalid extension '%s'", ext)
+			return
+		}
+		// TODO: check that the document has draft status, and that it's yours
+
+		// Generate new attachment ID
+		var b []byte = make([]byte, 5)
+		rand.Read(b)
+		attid_s := hex.EncodeToString(b)
+
+		// TODO: check for collisions
+
+		os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
+
+		f, err := os.Create(path.Join("doc", "g"+draft_id, "att", "a"+attid_s+"."+ext))
+		defer f.Close()
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		res := struct {
+			ID string `json:"attachment_id"`
+		}{
+			ID: attid_s,
+		}
+		jsres, err := json.Marshal(res)
+		if err != nil {
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(jsres)
+	})
 
 	mux.HandleFunc("/api/upload-draft", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -241,6 +298,83 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(rvm)
 	})
+	mux.HandleFunc("/api/upload-attachment", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		key := r.FormValue("api_key")
+		if len(key) < 32 {
+			w.WriteHeader(401)
+			return
+		}
+		// TODO: check API key
+
+		draft_id := strings.ToLower(r.FormValue("doc_id"))
+		_, err := hex.DecodeString(draft_id)
+		if err != nil || len(draft_id) != 10 {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
+			return
+		}
+		// TODO: check that the document has draft status, and that it's yours
+
+		att_id := strings.ToLower(r.FormValue("att_id"))
+		_, err = hex.DecodeString(att_id)
+		if err != nil || len(att_id) != 10 {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "att_id: '%s' -> %v", att_id, err)
+			return
+		}
+		// TODO: check that this attachment ID was created beforehand
+
+		f, _, err := r.FormFile("attachment")
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		err = os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		var g *os.File
+		for _, ext := range []string{"css", "svg", "png", "jpeg", "svg"} {
+			g, err = os.OpenFile(path.Join("doc", "g"+draft_id, "att", fmt.Sprintf("a%s.%s", att_id, ext)), os.O_APPEND|os.O_WRONLY, 0644)
+			if err == nil {
+				break
+			}
+		}
+
+		if g == nil || err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+		defer g.Close()
+
+		_, err = io.Copy(g, f)
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		res := struct {
+			Message string `json:"_"`
+		}{
+			Message: "Chunk uploaded successfully",
+		}
+		rvm, err := json.Marshal(res)
+		if err != nil {
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(rvm)
+	})
 
 	mux.HandleFunc("/documents/view/", func(w http.ResponseWriter, r *http.Request) {
 		var docid int64
@@ -250,10 +384,55 @@ func main() {
 			w.WriteHeader(404)
 			return
 		}
+
 		_, err := fmt.Sscanf(parts[3], "g%010x", &docid)
 		if err != nil {
 			w.WriteHeader(404)
 			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		if len(parts) == 4 {
+			w.Header().Set("Location", fmt.Sprintf("g%010x/", docid))
+			w.WriteHeader(302)
+			return
+		}
+
+		if len(parts) >= 6 && parts[4] == "att" {
+			var attid int64
+			var ext string
+			_, err := fmt.Sscanf(parts[5], "a%010x.%s", &attid, &ext)
+			if err != nil || strings.ContainsAny(parts[5], "/ \n\r\x00") {
+				w.WriteHeader(404)
+				fmt.Fprintf(w, "%v", err)
+				return
+			}
+
+			file_path := path.Join("doc", fmt.Sprintf("g%010x", docid), "att", parts[5])
+			f, err := os.Open(file_path)
+			if err != nil {
+				w.WriteHeader(404)
+				fmt.Fprintf(w, "%v", err)
+				return
+			}
+
+			if ext == "css" {
+				w.Header().Set("Content-Type", "text/css")
+			} else if ext == "svg" {
+				w.Header().Set("Content-Type", "image/svg+xml")
+			} else if ext == "png" || ext == "jpeg" {
+				w.Header().Set("Content-Type", "image/"+ext)
+			} else {
+				w.WriteHeader(403)
+				fmt.Fprintf(w, "%v", err)
+				return
+			}
+
+			fi, err := f.Stat()
+			if err == nil {
+				w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+			}
+			io.Copy(w, f)
 			return
 		}
 
