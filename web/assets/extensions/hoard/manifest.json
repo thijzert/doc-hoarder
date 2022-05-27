@@ -3,7 +3,7 @@
 	"name": "Doc hoarder",
 	"version": "0.1",
 
-	"description": "Archive the internet before it's too late",
+	"description": "Archive your favourite internet resources before they disappear",
 	"homepage_url": "https://github.com/thijzert/doc-hoarder",
 	"icons": {
 		"48": "icons/librarian-48.png",

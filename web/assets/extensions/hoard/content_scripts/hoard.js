@@ -127,33 +127,20 @@
 			let uploadResult = await upload.json();
 			console.log(uploadResult);
 		}
+
+		return {
+			success: true,
+			document_id: doc_id.id,
+			full_url: (new URL("documents/view/g" + doc_id.id + "/", BASE_URL)).toString(),
+		};
 	}
 
 
-	/**
-	 * Given a URL to a beast image, remove all existing beasts, then
-	 * create and style an IMG node pointing to
-	 * that image, then insert the node into the document.
-	 */
-	function insertBeast(beastURL) {
-		// removeExistingBeasts();
-		// let beastImage = document.createElement("img");
-		// beastImage.setAttribute("src", beastURL);
-		// beastImage.style.height = "100vh";
-		// beastImage.className = "beastify-image";
-		// document.body.appendChild(beastImage);
-	}
-
-	/**
-	 * Listen for messages from the background script.
-	 * Call "insertBeast()" or "removeExistingBeasts()".
-	 */
-	browser.runtime.onMessage.addListener((message) => {
+	// Listen for messages from the background script.
+	browser.runtime.onMessage.addListener(async (message) => {
 		console.log("Got message", message);
-		if (message.command === "beastify") {
-			insertBeast(message.beastURL);
-		} else if (message.command === "flatten") {
-			flatten();
+		if (message.command === "flatten") {
+			return await flatten();
 		}
 	});
 

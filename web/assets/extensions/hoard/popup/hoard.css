@@ -31,3 +31,11 @@ html, body {
 	background-color: #EAEA9D;
 }
 
+#error-log > div {
+	transition: opacity 0.5s;
+}
+#error-log > div.error {
+	border: 0.0625rem dashed rgb(255,64,64);
+	border: 0.0625rem dashed rgba(255,64,64,0.3);
+}
+
