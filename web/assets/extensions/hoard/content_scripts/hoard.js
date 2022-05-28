@@ -93,10 +93,6 @@
 			}
 		}
 
-		let p = doc.createElement("P");
-		p.textContent = "Hello, world";
-		doc.body.insertBefore(p, doc.body.firstChild);
-		
 		for ( let sc of doc.querySelectorAll("script") ) {
 			rm(sc);
 		}
