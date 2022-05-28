@@ -444,7 +444,7 @@ func main() {
 			return
 		}
 
-		w.Header().Set("Content-Security-Policy", "default-src: 'none'; img-src: data: 'self'; style-src: 'unsafe-inline' 'self'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline' 'self'")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 		fi, err := f.Stat()
