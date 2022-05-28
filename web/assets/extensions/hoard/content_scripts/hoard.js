@@ -45,6 +45,32 @@
 		return rv + ">";
 	}
 
+	const UPLOAD_CHUNK_SIZE = 512000;
+	const uploadFile = async (url, paramName, filename, contents, formParameters) => {
+		if ( !(contents instanceof Blob) ) {
+			contents = new Blob([contents]);
+		}
+
+		let idx = 0;
+		do {
+			let uploadForm = new FormData();
+			for ( let k in formParameters ) {
+				if ( formParameters.hasOwnProperty(k) ) {
+					uploadForm.append(k, formParameters[k]);
+				}
+			}
+			uploadForm.append(paramName, new File([contents.slice(idx, idx+UPLOAD_CHUNK_SIZE)], document.title + ".html"));
+
+			let upload = await fetch(url, {
+				method: "POST",
+				body: uploadForm,
+			});
+			let uploadResult = await upload.json();
+			console.log(uploadResult);
+			idx += UPLOAD_CHUNK_SIZE;
+		} while ( idx < contents.size );
+	}
+
 	const flatten = async () => {
 		const BASE_URL = "https://xxxxxxxxxxxxxxxxxxxxxxxx";
 		const API_KEY = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
@@ -75,14 +101,13 @@
 			rm(sc);
 		}
 
-		for ( let link of doc.querySelectorAll("link") ) {
-			if ( link.rel != "stylesheet" ) {
-				continue;
+		let cssAttachments = {};
+		let attachCSS = async (stylesheet) => {
+			console.log("Attaching CSS ", stylesheet.href);
+			if ( !stylesheet.href || cssAttachments.hasOwnProperty(stylesheet.href) ) {
+				console.log("reattach limbs, not style sheets");
+				return cssAttachments[stylesheet.href];
 			}
-			console.log("link", link.href, link.rel)
-
-			let attcnt = await fetch(link.href);
-			attcnt = await attcnt.blob();
 
 			let att_id = {method: "POST", body: new FormData()}
 			att_id.body.append("api_key", API_KEY);
@@ -91,42 +116,54 @@
 			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
 			att_id = await att_id.json();
 			att_id = att_id.attachment_id;
+			cssAttachments[stylesheet.href] = "a" + att_id + ".css";
 
-			let uploadForm = new FormData();
-			uploadForm.append("api_key", API_KEY);
-			uploadForm.append("doc_id", doc_id.id);
-			uploadForm.append("att_id", att_id);
+			let attcnt = "";
 
-			uploadForm.append("attachment", new File([attcnt], "a" + att_id + ".css"));
+			for ( let rule of stylesheet.cssRules ) {
+				if ( rule instanceof CSSImportRule ) {
+					let imp = await attachCSS(rule.styleSheet);
+					attcnt += `@import url("${imp}");`;
+				} else {
+					attcnt += rule.cssText;
+				}
+			}
 
-			let upload = await fetch(BASE_URL + "api/upload-attachment", {
-				method: "POST",
-				body: uploadForm,
+			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", "a" + att_id + ".css", attcnt, {
+				"api_key": API_KEY,
+				"doc_id": doc_id.id,
+				"att_id": att_id,
 			});
-			let uploadResult = await upload.json();
-			console.log(uploadResult);
 
-			link.href = `att/a${att_id}.css`;
+			return cssAttachments[stylesheet.href];
+		}
+
+		for ( let stylesheet of document.styleSheets ) {
+			await attachCSS(stylesheet);
+		}
+
+		for ( let link of doc.querySelectorAll("link") ) {
+			if ( link.rel != "stylesheet" ) {
+				continue;
+			}
+
+			let href = link.href.toString();
+			if ( cssAttachments.hasOwnProperty(href) ) {
+				link.href = "att/" + cssAttachments[href];
+			} else {
+				link.rel = "defunct-stylesheet";
+				console.error("css link not found", link.href, cssAttachments);
+			}
 		}
 
 		contents = formatDTD(document.doctype) + "\n" + doc.body.parentNode.outerHTML;
 		console.log("Contents: ", contents.length, contents.substr(0,500));
 
-		const CHUNK_SIZE = 512000;
-		for ( let idx = 0; idx < contents.length; idx += CHUNK_SIZE ) {
-			let uploadForm = new FormData();
-			uploadForm.append("api_key", API_KEY);
-			uploadForm.append("doc_id", doc_id.id);
 
-			uploadForm.append("document", new File([new Blob([contents.substr(idx, CHUNK_SIZE)])], document.title + ".html"));
-
-			let upload = await fetch(BASE_URL + "api/upload-draft", {
-				method: "POST",
-				body: uploadForm,
-			});
-			let uploadResult = await upload.json();
-			console.log(uploadResult);
-		}
+		await uploadFile(BASE_URL + "api/upload-draft", "document", document.title + ".html", contents, {
+			"api_key": API_KEY,
+			"doc_id": doc_id.id,
+		});
 
 		return {
 			success: true,
