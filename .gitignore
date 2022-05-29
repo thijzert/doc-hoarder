@@ -1,2 +1,4 @@
 cmd/hoard/hoard
 cmd/hoard/hoard.exe
+/build
+web/assets/extensions/*.xpi

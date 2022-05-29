@@ -1,17 +1,22 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +29,7 @@ type job func(ctx context.Context) error
 type compileConfig struct {
 	Development bool
 	Quick       bool
+	BaseURL     string
 	GOOS        string
 	GOARCH      string
 }
@@ -38,6 +44,7 @@ func main() {
 	run := false
 	flag.BoolVar(&conf.Development, "development", false, "Create a development build")
 	flag.BoolVar(&conf.Quick, "quick", false, "Create a development build")
+	flag.StringVar(&conf.BaseURL, "base-url", "", "Base address where this application will run")
 	flag.StringVar(&conf.GOARCH, "GOARCH", "", "Cross-compile for architecture")
 	flag.StringVar(&conf.GOOS, "GOOS", "", "Cross-compile for operating system")
 	flag.BoolVar(&watch, "watch", false, "Watch source tree for changes")
@@ -70,7 +77,11 @@ func main() {
 	}
 
 	if watch {
-		theJob = watchSourceTree([]string{"."}, []string{"*.go"}, theJob)
+		theJob = watchSourceTree([]string{"."}, []string{
+			"*.go",
+			"web/assets/extensions/*/*",
+			"web/assets/extensions/*/*/*",
+		}, theJob)
 	}
 
 	err := theJob(context.Background())
@@ -80,6 +91,28 @@ func main() {
 }
 
 func compile(ctx context.Context, conf compileConfig) error {
+	// Build browser extensions
+	if conf.BaseURL != "" {
+		f, err := os.Open("web/assets/extensions")
+		if err != nil {
+			return errors.Errorf("cannot list extensions: %v", err)
+		}
+		fis, err := f.ReadDir(-1)
+		if err != nil {
+			return errors.Errorf("cannot list extensions: %v", err)
+		}
+
+		for _, fi := range fis {
+			if !fi.IsDir() || fi.Name() == "" || fi.Name()[:1] == "." {
+				continue
+			}
+			err = buildBrowserExt(ctx, conf, fi.Name())
+			if err != nil {
+				return errors.Errorf("error building extension '%s': %v", fi.Name(), err)
+			}
+		}
+	}
+
 	// Compile static assets
 	if !conf.Development || !conf.Quick {
 		// TODO: compile CSS
@@ -148,6 +181,105 @@ func compile(ctx context.Context, conf compileConfig) error {
 	return nil
 }
 
+func buildBrowserExt(ctx context.Context, conf compileConfig, extName string) error {
+	var f brextFileHandler
+
+	var rv bytes.Buffer
+	var zf *zip.Writer
+
+	if conf.Development {
+		f = func(fileName string, contents []byte) error {
+			fpath := path.Join("build/extensions", extName, fileName)
+			os.MkdirAll(path.Dir(fpath), 0755)
+			g, err := os.Create(fpath)
+			if err != nil {
+				return err
+			}
+			defer g.Close()
+			_, err = g.Write(contents)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+	} else {
+		zf = zip.NewWriter(&rv)
+		defer zf.Close()
+
+		f = func(fileName string, contents []byte) error {
+			g, err := zf.Create(fileName)
+			if err != nil {
+				return err
+			}
+			g.Write(contents)
+			return nil
+		}
+	}
+
+	err := browserExtRecurse(ctx, conf, extName, "", f)
+	if err != nil {
+		return err
+	}
+
+	if !conf.Development {
+		zf.Close()
+
+		g, err := os.Create(path.Join("web/assets/extensions", extName+".xpi"))
+		if err != nil {
+			return err
+		}
+		log.Printf("TODO: submit to AMO")
+		_, err = io.Copy(g, &rv)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func browserExtRecurse(ctx context.Context, conf compileConfig, extName, dir string, f brextFileHandler) error {
+	d, err := os.Open(path.Join("web/assets/extensions", extName, dir))
+	if err != nil {
+		return err
+	}
+	fis, err := d.ReadDir(-1)
+	if err != nil {
+		return err
+	}
+
+	for _, fi := range fis {
+		fn := fi.Name()
+		if fn == "" || fn[:1] == "." {
+			continue
+		} else if fi.IsDir() {
+			browserExtRecurse(ctx, conf, extName, path.Join(dir, fn), f)
+			continue
+		}
+
+		contents, err := ioutil.ReadFile(path.Join("web/assets/extensions", extName, dir, fn))
+		if err != nil {
+			return err
+		}
+
+		if len(fn) > 5 && fn[len(fn)-4:] != ".png" {
+			jss := string(contents)
+
+			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx\"", fmt.Sprintf("\"%s\"", conf.BaseURL), -1)
+			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx/*\"", fmt.Sprintf("\"%s*\"", conf.BaseURL), -1)
+
+			contents = []byte(jss)
+		}
+
+		f(path.Join(dir, fn), contents)
+	}
+
+	return nil
+}
+
+type brextFileHandler func(fileName string, contents []byte) error
+
 func passthru(ctx context.Context, argv ...string) error {
 	c := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	return passthruCmd(c)
@@ -206,7 +338,7 @@ func directoryHash(level int, filePath string, fileFilter []string) []byte {
 	if fi.IsDir() {
 		base := filepath.Base(filePath)
 		if level > 0 {
-			if base == ".git" || base == ".." || base == "node_modules" {
+			if base == ".git" || base == ".." || base == "node_modules" || base == "build" || base == "doc" {
 				return []byte{}
 			}
 		}

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"archive/zip"
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -73,64 +71,6 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write(jsb.Code)
-	})
-
-	mux.HandleFunc("/doc-hoarder.xpi", func(w http.ResponseWriter, r *http.Request) {
-		base_url := r.URL.Query().Get("base")
-		if len(base_url) < 6 || base_url[:4] != "http" {
-			w.WriteHeader(400)
-			w.Write([]byte("// No base URL found"))
-			return
-		}
-
-		var rv bytes.Buffer
-		zf := zip.NewWriter(&rv)
-		defer zf.Close()
-
-		files := []string{
-			"manifest.json",
-			"icons/librarian-48.png",
-			"icons/librarian-96.png",
-			"content_scripts/hoard.js",
-			"popup/hoard.css",
-			"popup/hoard.html",
-			"popup/hoard.js",
-		}
-
-		for _, fn := range files {
-			js, err := plumbing.GetAsset("extensions/hoard/" + fn)
-			if err != nil {
-				w.WriteHeader(500)
-				fmt.Fprintf(w, "%v", err)
-				return
-			}
-
-			if fn[len(fn)-4:] != ".png" {
-				jss := string(js)
-
-				jss = replaceJavascriptStringF(jss, "https://xxxxxxxxxxxxxxxxxxxxxxxx", base_url, "const BASE_URL = %s;")
-				jss = replaceJavascriptStringF(jss, "https://xxxxxxxxxxxxxxxxxxxxxxxx/*", base_url, "%s,")
-
-				// TODO: generate api key
-				api_key := "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-				jss = replaceJavascriptStringF(jss, "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", api_key, "const API_KEY = %s;")
-
-				js = []byte(jss)
-			}
-
-			g, err := zf.Create(fn)
-			if err != nil {
-				w.WriteHeader(500)
-				fmt.Fprintf(w, "%v", err)
-				return
-			}
-			g.Write(js)
-		}
-
-		zf.Close()
-
-		w.Header().Set("Content-Type", "application/x-xpinstall")
-		io.Copy(w, &rv)
 	})
 
 	mux.HandleFunc("/assets/js/", func(w http.ResponseWriter, r *http.Request) {
@@ -459,22 +399,4 @@ func main() {
 		Handler: mux,
 	}
 	log.Fatal(srv.ListenAndServe())
-}
-
-func replaceJavascriptStringF(s, search, replace, format string) string {
-	js_search, err := json.Marshal(search)
-	if err != nil {
-		return s
-	}
-
-	js_replace, err := json.Marshal(replace)
-	if err != nil {
-		return s
-	}
-
-	return strings.Replace(s, fmt.Sprintf(format, js_search), fmt.Sprintf(format, js_replace), 1)
-}
-
-func replaceJavascriptString(s, search, replace string) string {
-	return replaceJavascriptStringF(s, search, replace, "%s")
 }
