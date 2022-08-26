@@ -3,21 +3,30 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
 
-	esbuild "github.com/evanw/esbuild/pkg/api"
-
 	"github.com/thijzert/doc-hoarder/web/plumbing"
 )
 
+var BaseURL string
+var Domain string
+
 func main() {
+	if BaseURL == "" {
+		log.Fatal("baseURL not compiled in")
+	}
+	u, err := url.Parse(BaseURL)
+	if err == nil {
+		Domain = u.Host
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -27,50 +36,6 @@ func main() {
 		w.Write([]byte("<script src=\"assets/js/gen-link.js\"></script>\n"))
 
 		w.Write([]byte("</body></html>"))
-	})
-
-	mux.HandleFunc("/flatten.js", func(w http.ResponseWriter, r *http.Request) {
-		base_url := r.URL.Query().Get("base")
-		if len(base_url) < 6 || base_url[:4] != "http" {
-			w.WriteHeader(400)
-			w.Write([]byte("// No base URL found"))
-			return
-		}
-
-		js, err := plumbing.GetAsset("js/flatten.js")
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-
-		jss := string(js)
-
-		js_base, err := json.Marshal(base_url)
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-		jss = strings.Replace(jss, "const BASE_URL = \"https://xxxxxxxxxxxxxxxxxxxxxxxx\";", fmt.Sprintf("const BASE_URL = %s;", js_base), 1)
-
-		// TODO: generate api key
-		api_key := "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
-		jss = strings.Replace(jss, "const API_KEY = \"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\";", fmt.Sprintf("const API_KEY = \"%s\";", api_key), 1)
-
-		jsb := esbuild.Transform(jss, esbuild.TransformOptions{
-			MinifyWhitespace:  true,
-			MinifyIdentifiers: true,
-			MinifySyntax:      true,
-		})
-		if len(jsb.Errors) > 0 {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/javascript")
-		w.Write(jsb.Code)
 	})
 
 	mux.HandleFunc("/assets/js/", func(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +54,47 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write([]byte(js))
+	})
+
+	mux.HandleFunc("/ext/updates.json", func(w http.ResponseWriter, r *http.Request) {
+		type versionInfo struct {
+			Version    string `json:"version"`
+			UpdateLink string `json:"update_link"`
+		}
+		rv := struct {
+			Addons map[string][]versionInfo `json:"addons"`
+		}{make(map[string][]versionInfo)}
+
+		addonList := []string{"hoard"}
+		for _, addon := range addonList {
+			rv.Addons[addon+"@"+Domain] = []versionInfo{
+				versionInfo{"0.1", BaseURL + "ext/" + addon + ".xpi"},
+			}
+		}
+
+		plumbing.WriteJSON(w, rv)
+	})
+	mux.HandleFunc("/ext/", func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(r.URL.Path, "/")
+		extName := parts[2]
+		if len(extName) < 5 || extName[0] == '.' || extName[len(extName)-4:] != ".xpi" {
+			w.WriteHeader(400)
+			return
+		}
+
+		ext, err := plumbing.GetAsset(path.Join("extensions", extName[:len(extName)-4]+"-signed.xpi"))
+		if err != nil {
+			ext, err = plumbing.GetAsset(path.Join("extensions", extName))
+		}
+		if err != nil {
+			w.WriteHeader(404)
+			plumbing.WriteJSON(w, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/x-xpinstall")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(ext)))
+		w.Write(ext)
 	})
 
 	mux.HandleFunc("/api/new-doc", func(w http.ResponseWriter, r *http.Request) {
@@ -111,13 +117,7 @@ func main() {
 		}{
 			ID: hex.EncodeToString(b),
 		}
-		rvm, err := json.Marshal(res)
-		if err != nil {
-			w.WriteHeader(500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(rvm)
+		plumbing.WriteJSON(w, res)
 	})
 	mux.HandleFunc("/api/new-attachment", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -168,13 +168,7 @@ func main() {
 		}{
 			ID: attid_s,
 		}
-		jsres, err := json.Marshal(res)
-		if err != nil {
-			w.WriteHeader(500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(jsres)
+		plumbing.WriteJSON(w, res)
 	})
 
 	mux.HandleFunc("/api/upload-draft", func(w http.ResponseWriter, r *http.Request) {
@@ -230,13 +224,7 @@ func main() {
 		}{
 			Message: "Chunk uploaded successfully",
 		}
-		rvm, err := json.Marshal(res)
-		if err != nil {
-			w.WriteHeader(500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(rvm)
+		plumbing.WriteJSON(w, res)
 	})
 	mux.HandleFunc("/api/upload-attachment", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -307,13 +295,7 @@ func main() {
 		}{
 			Message: "Chunk uploaded successfully",
 		}
-		rvm, err := json.Marshal(res)
-		if err != nil {
-			w.WriteHeader(500)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(rvm)
+		plumbing.WriteJSON(w, res)
 	})
 
 	mux.HandleFunc("/documents/view/", func(w http.ResponseWriter, r *http.Request) {

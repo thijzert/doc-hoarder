@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -30,6 +31,7 @@ type compileConfig struct {
 	Development bool
 	Quick       bool
 	BaseURL     string
+	Domain      string
 	GOOS        string
 	GOARCH      string
 }
@@ -50,6 +52,11 @@ func main() {
 	flag.BoolVar(&watch, "watch", false, "Watch source tree for changes")
 	flag.BoolVar(&run, "run", false, "Run doc-hoarder upon successful compilation")
 	flag.Parse()
+
+	u, err := url.Parse(conf.BaseURL)
+	if err == nil {
+		conf.Domain = u.Host
+	}
 
 	if conf.Development && conf.Quick {
 		log.Printf("")
@@ -84,7 +91,7 @@ func main() {
 		}, theJob)
 	}
 
-	err := theJob(context.Background())
+	err = theJob(context.Background())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -152,6 +159,7 @@ func compile(ctx context.Context, conf compileConfig) error {
 	compileArgs := append([]string{
 		"build",
 		"-o", execOutput,
+		"-ldflags", "-X main.BaseURL=" + conf.BaseURL,
 	}, gofiles...)
 
 	compileCmd := exec.CommandContext(ctx, "go", compileArgs...)
@@ -266,7 +274,9 @@ func browserExtRecurse(ctx context.Context, conf compileConfig, extName, dir str
 		if len(fn) > 5 && fn[len(fn)-4:] != ".png" {
 			jss := string(contents)
 
+			jss = strings.Replace(jss, "@xxxxxxxxxxxxxxxxxxxxxxxx", fmt.Sprintf("@%s", conf.Domain), -1)
 			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx\"", fmt.Sprintf("\"%s\"", conf.BaseURL), -1)
+			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx/ext/", fmt.Sprintf("\"%sext/", conf.BaseURL), -1)
 			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx/*\"", fmt.Sprintf("\"%s*\"", conf.BaseURL), -1)
 
 			contents = []byte(jss)
