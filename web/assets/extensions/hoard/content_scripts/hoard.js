@@ -35,6 +35,10 @@
 
 
 	const formatDTD = (doctype) => {
+		if (doctype === null) {
+			return "<!DOCTYPE html>";
+		}
+
 		let rv = "<!DOCTYPE " + doctype.name;
 		if ( doctype.publicId != "" ) {
 			rv += " PUBLIC \"" + doctype.publicId + "\"";
@@ -116,14 +120,16 @@
 
 			let attcnt = "";
 
-			for ( let rule of stylesheet.cssRules ) {
-				if ( rule instanceof CSSImportRule ) {
-					let imp = await attachCSS(rule.styleSheet);
-					attcnt += `@import url("${imp}");`;
-				} else {
-					attcnt += rule.cssText;
+			try {
+				for ( let rule of stylesheet.cssRules ) {
+					if ( rule instanceof CSSImportRule ) {
+						let imp = await attachCSS(rule.styleSheet);
+						attcnt += `@import url("${imp}");`;
+					} else {
+						attcnt += rule.cssText;
+					}
 				}
-			}
+			} catch ( _e ) { }
 
 			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", "a" + att_id + ".css", attcnt, {
 				"api_key": API_KEY,
