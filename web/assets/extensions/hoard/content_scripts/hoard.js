@@ -116,7 +116,7 @@
 			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
 			att_id = await att_id.json();
 			att_id = att_id.attachment_id;
-			cssAttachments[stylesheet.href] = "a" + att_id + ".css";
+			cssAttachments[stylesheet.href] = "t" + att_id + ".css";
 
 			let attcnt = "";
 

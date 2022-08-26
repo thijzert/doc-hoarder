@@ -155,7 +155,7 @@ func main() {
 
 		os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
 
-		f, err := os.Create(path.Join("doc", "g"+draft_id, "att", "a"+attid_s+"."+ext))
+		f, err := os.Create(path.Join("doc", "g"+draft_id, "att", "t"+attid_s+"."+ext))
 		defer f.Close()
 		if err != nil {
 			w.WriteHeader(500)
@@ -270,7 +270,7 @@ func main() {
 
 		var g *os.File
 		for _, ext := range []string{"css", "svg", "png", "jpeg", "svg"} {
-			g, err = os.OpenFile(path.Join("doc", "g"+draft_id, "att", fmt.Sprintf("a%s.%s", att_id, ext)), os.O_APPEND|os.O_WRONLY, 0644)
+			g, err = os.OpenFile(path.Join("doc", "g"+draft_id, "att", fmt.Sprintf("t%s.%s", att_id, ext)), os.O_APPEND|os.O_WRONLY, 0644)
 			if err == nil {
 				break
 			}
@@ -323,7 +323,7 @@ func main() {
 		if len(parts) >= 6 && parts[4] == "att" {
 			var attid int64
 			var ext string
-			_, err := fmt.Sscanf(parts[5], "a%010x.%s", &attid, &ext)
+			_, err := fmt.Sscanf(parts[5], "t%010x.%s", &attid, &ext)
 			if err != nil || strings.ContainsAny(parts[5], "/ \n\r\x00") {
 				w.WriteHeader(404)
 				fmt.Fprintf(w, "%v", err)
