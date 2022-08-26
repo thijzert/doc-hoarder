@@ -164,9 +164,11 @@ func main() {
 		}
 
 		res := struct {
-			ID string `json:"attachment_id"`
+			ID       string `json:"attachment_id"`
+			Filename string `json:"filename"`
 		}{
-			ID: attid_s,
+			ID:       attid_s,
+			Filename: "att/t" + attid_s + "." + ext,
 		}
 		plumbing.WriteJSON(w, res)
 	})

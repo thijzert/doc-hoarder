@@ -115,8 +115,10 @@
 			att_id.body.append("ext", "css");
 			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
 			att_id = await att_id.json();
+			let filename = att_id.filename;
 			att_id = att_id.attachment_id;
-			cssAttachments[stylesheet.href] = "t" + att_id + ".css";
+			console.log("filename: ", filename);
+			cssAttachments[stylesheet.href] = filename;
 
 			let attcnt = "";
 
@@ -131,7 +133,7 @@
 				}
 			} catch ( _e ) { }
 
-			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", "a" + att_id + ".css", attcnt, {
+			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, attcnt, {
 				"api_key": API_KEY,
 				"doc_id": doc_id.id,
 				"att_id": att_id,
@@ -151,7 +153,7 @@
 
 			let href = link.href.toString();
 			if ( cssAttachments.hasOwnProperty(href) ) {
-				link.href = "att/" + cssAttachments[href];
+				link.href = cssAttachments[href];
 			} else {
 				link.rel = "defunct-stylesheet";
 				console.error("css link not found", link.href, cssAttachments);
