@@ -301,6 +301,62 @@ func main() {
 		}
 		plumbing.WriteJSON(w, res)
 	})
+	mux.HandleFunc("/api/download-attachment", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		key := r.FormValue("api_key")
+		if len(key) < 32 {
+			w.WriteHeader(401)
+			return
+		}
+		// TODO: check API key
+
+		draft_id := strings.ToLower(r.FormValue("doc_id"))
+		_, err := hex.DecodeString(draft_id)
+		if err != nil || len(draft_id) != 10 {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
+			return
+		}
+		// TODO: check that the document has draft status, and that it's yours
+
+		att_id := strings.ToLower(r.FormValue("att_id"))
+		_, err = hex.DecodeString(att_id)
+		if err != nil || len(att_id) != 10 {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "att_id: '%s' -> %v", att_id, err)
+			return
+		}
+		// TODO: check that this attachment ID was created beforehand
+
+		err = os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		var g *os.File
+		for _, ext := range []string{"css", "svg", "png", "jpeg", "svg"} {
+			g, err = os.Open(path.Join("doc", "g"+draft_id, "att", fmt.Sprintf("t%s.%s", att_id, ext)))
+			if err == nil {
+				t := mime.TypeByExtension("." + ext)
+				if t != "" {
+					w.Header().Set("Content-Type", t)
+				}
+				break
+			}
+		}
+
+		if g == nil || err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+		defer g.Close()
+
+		io.Copy(w, g)
+	})
 	mux.HandleFunc("/api/proxy-attachment", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -345,7 +401,7 @@ func main() {
 			plumbing.JSONMessage(w, "unknown mime type")
 			return
 		}
-		if ct != "text/css" && (len(ct) < 6 || ct[:6] != "image/") {
+		if ct != "text/css" && !strstr(ct, "image/") && !strstr(ct, "text/css;") {
 			w.WriteHeader(400)
 			plumbing.JSONMessage(w, "subresource has invalid mime type '%s'", ct)
 			return
@@ -473,4 +529,11 @@ func main() {
 		Handler: mux,
 	}
 	log.Fatal(srv.ListenAndServe())
+}
+
+func strstr(s, prefix string) bool {
+	if len(s) < len(prefix) {
+		return false
+	}
+	return s[:len(prefix)] == prefix
 }

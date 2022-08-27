@@ -58,6 +58,10 @@
 		let idx = 0;
 		do {
 			let uploadForm = new FormData();
+			if ( idx === 0 ) {
+				uploadForm.append("truncate", "1")
+			}
+
 			for ( let k in formParameters ) {
 				if ( formParameters.hasOwnProperty(k) ) {
 					uploadForm.append(k, formParameters[k]);
@@ -70,7 +74,6 @@
 				body: uploadForm,
 			});
 			let uploadResult = await upload.json();
-			console.log(uploadResult);
 			idx += UPLOAD_CHUNK_SIZE;
 		} while ( idx < contents.size );
 	}
@@ -114,7 +117,6 @@
 
 			let url = new URL(image_url, location.href);
 			if ( url.origin !== location.origin ) {
-				console.log("proxying url ", image_url);
 				att_id.body.append("url", image_url);
 				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
 				att_id = await att_id.json();
@@ -134,7 +136,6 @@
 			att_id = await att_id.json();
 			let filename = att_id.filename;
 			att_id = att_id.attachment_id;
-			console.log("filename: ", filename);
 			imageAttachments[image_url] = filename;
 
 			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, blob, {
@@ -146,7 +147,7 @@
 			return imageAttachments[image_url];
 		};
 		let tryAttach = async (u) => {
-			if ( u.substr(0,5) != "data:" ) {
+			if ( u != "" && u.substr(0,5) != "data:" ) {
 				try {
 					let s = await attachImg(u)
 				} catch ( _e ) { console.error(_e); }
@@ -163,14 +164,12 @@
 		}
 		for ( let img of doc.images ) {
 			if ( imageAttachments.hasOwnProperty(img.src) ) {
-				console.log("replacing url ", img.src, " with ", imageAttachments[img.src]);
 				img.src = imageAttachments[img.src];
 			}
 			let srcset = [];
 			for ( let srcs of img.srcset.split(",") ) {
 				srcs = srcs.trim().split(" ");
 				if ( imageAttachments.hasOwnProperty(srcs[0]) ) {
-					console.log("replacing srcset url ", srcs[0], " with ", imageAttachments[srcs[0]]);
 					srcs[0] = imageAttachments[srcs[0]];
 				}
 				srcset.push(srcs.join(" "));
@@ -180,21 +179,46 @@
 
 		let cssAttachments = {};
 		let attachCSS = async (stylesheet) => {
-			if ( !stylesheet.href || cssAttachments.hasOwnProperty(stylesheet.href) ) {
-				return cssAttachments[stylesheet.href];
+			const stylesheet_href = stylesheet.href;
+			if ( !stylesheet_href || cssAttachments.hasOwnProperty(stylesheet_href) ) {
+				return cssAttachments[stylesheet_href];
 			}
-			console.log("Attaching CSS ", stylesheet.href);
+			console.log("Attaching CSS ", stylesheet_href);
 
-			let att_id = {method: "POST", body: new FormData()}
-			att_id.body.append("api_key", API_KEY);
-			att_id.body.append("doc_id", doc_id.id);
-			att_id.body.append("ext", "css");
-			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
-			att_id = await att_id.json();
-			let filename = att_id.filename;
-			att_id = att_id.attachment_id;
-			console.log("filename: ", filename);
-			cssAttachments[stylesheet.href] = filename;
+			let att_id = null, filename = null;
+
+			let url = new URL(stylesheet_href, location.href);
+			if ( url.origin !== location.origin ) {
+				att_id = {method: "POST", body: new FormData()}
+				att_id.body.append("api_key", API_KEY);
+				att_id.body.append("doc_id", doc_id.id);
+				att_id.body.append("url", stylesheet_href);
+				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
+				att_id = await att_id.json();
+				filename = att_id.filename;
+				att_id = att_id.attachment_id;
+				cssAttachments[stylesheet_href] = filename;
+
+				style_cnt = {method: "POST", body: new FormData()}
+				style_cnt.body.append("api_key", API_KEY);
+				style_cnt.body.append("doc_id", doc_id.id);
+				style_cnt.body.append("att_id", att_id);
+				style_cnt = await fetch(BASE_URL + "api/download-attachment", style_cnt)
+				style_cnt = await style_cnt.blob();
+				stylesheet = new CSSStyleSheet();
+				stylesheet.replaceSync(style_cnt.toString());
+			} else {
+				att_id = {method: "POST", body: new FormData()}
+				att_id.body.append("api_key", API_KEY);
+				att_id.body.append("doc_id", doc_id.id);
+				att_id.body.append("ext", "css");
+				att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
+				att_id = await att_id.json();
+				filename = att_id.filename;
+				att_id = att_id.attachment_id;
+				cssAttachments[stylesheet_href] = filename;
+			}
+
 
 			let attcnt = "";
 
@@ -215,7 +239,7 @@
 				"att_id": att_id,
 			});
 
-			return cssAttachments[stylesheet.href];
+			return cssAttachments[stylesheet_href];
 		}
 
 		for ( let stylesheet of document.styleSheets ) {
@@ -237,7 +261,6 @@
 		}
 
 		contents = formatDTD(document.doctype) + "\n" + doc.body.parentNode.outerHTML;
-		console.log("Contents: ", contents.length, contents.substr(0,500));
 
 
 		await uploadFile(BASE_URL + "api/upload-draft", "document", document.title + ".html", contents, {
