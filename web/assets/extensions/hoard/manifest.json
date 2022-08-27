@@ -1,7 +1,7 @@
 {
 	"manifest_version": 2,
 	"name": "Doc hoarder",
-	"version": "0.1",
+	"version": "x.y.z-w-gdeadbeef",
 
 	"description": "Archive your favourite internet resources before they disappear",
 	"homepage_url": "https://github.com/thijzert/doc-hoarder",

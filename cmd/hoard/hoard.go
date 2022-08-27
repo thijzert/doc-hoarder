@@ -11,13 +11,13 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/thijzert/doc-hoarder/web/plumbing"
 )
 
+var Version string
 var BaseURL string
 var Domain string
 
@@ -30,10 +30,7 @@ func main() {
 		Domain = u.Host
 	}
 
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		log.Printf("Git version: %s %s", buildInfo.Main.Version, buildInfo.Main.Sum)
-		log.Printf("Path: %s", buildInfo.Main.Path)
-	}
+	log.Printf("Doc-hoarder version %s", Version)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +73,7 @@ func main() {
 		addonList := []string{"hoard"}
 		for _, addon := range addonList {
 			rv.Addons[addon+"@"+Domain] = []versionInfo{
-				versionInfo{"0.1", BaseURL + "ext/" + addon + ".xpi"},
+				versionInfo{Version, BaseURL + "ext/" + addon + ".xpi"},
 			}
 		}
 

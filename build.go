@@ -32,6 +32,7 @@ type compileConfig struct {
 	Quick       bool
 	BaseURL     string
 	Domain      string
+	Version     string
 	GOOS        string
 	GOARCH      string
 }
@@ -52,6 +53,10 @@ func main() {
 	flag.BoolVar(&watch, "watch", false, "Watch source tree for changes")
 	flag.BoolVar(&run, "run", false, "Run doc-hoarder upon successful compilation")
 	flag.Parse()
+
+	if conf.BaseURL == "" {
+		log.Fatalf("Please set the Base URL using the --base-url flag")
+	}
 
 	u, err := url.Parse(conf.BaseURL)
 	if err == nil {
@@ -98,6 +103,14 @@ func main() {
 }
 
 func compile(ctx context.Context, conf compileConfig) error {
+	// Determine version
+	conf.Version = "unknown-version"
+	gitDescCmd := exec.CommandContext(ctx, "git", "describe")
+	gitDescribe, err := gitDescCmd.Output()
+	if err == nil && len(gitDescribe) > 0 {
+		conf.Version = strings.TrimLeft(strings.TrimSpace(string(gitDescribe)), "v")
+	}
+
 	// Build browser extensions
 	if conf.BaseURL != "" {
 		f, err := os.Open("web/assets/extensions")
@@ -159,7 +172,7 @@ func compile(ctx context.Context, conf compileConfig) error {
 	compileArgs := append([]string{
 		"build",
 		"-o", execOutput,
-		"-ldflags", "-X main.BaseURL=" + conf.BaseURL,
+		"-ldflags", fmt.Sprintf("-X 'main.Version=%s' -X 'main.BaseURL=%s'", conf.Version, conf.BaseURL),
 	}, gofiles...)
 
 	compileCmd := exec.CommandContext(ctx, "go", compileArgs...)
@@ -274,6 +287,7 @@ func browserExtRecurse(ctx context.Context, conf compileConfig, extName, dir str
 		if len(fn) > 5 && fn[len(fn)-4:] != ".png" {
 			jss := string(contents)
 
+			jss = strings.Replace(jss, "\"x.y.z-w-gdeadbeef\"", fmt.Sprintf("\"%s\"", conf.Version), -1)
 			jss = strings.Replace(jss, "@xxxxxxxxxxxxxxxxxxxxxxxx", fmt.Sprintf("@%s", conf.Domain), -1)
 			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx\"", fmt.Sprintf("\"%s\"", conf.BaseURL), -1)
 			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx/ext/", fmt.Sprintf("\"%sext/", conf.BaseURL), -1)
