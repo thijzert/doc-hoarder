@@ -38,7 +38,7 @@ func main() {
 		w.Write([]byte("<!DOCTYPE html>\n<html><head><base href=\".\"></head><body>\n\n"))
 		w.Write([]byte("<p>Hello, world</p>\n"))
 
-		w.Write([]byte("<script src=\"assets/js/gen-link.js\"></script>\n"))
+		w.Write([]byte("<p><a href=\"ext/hoard.xpi\">Download browser extension</a></p>\n"))
 
 		w.Write([]byte("</body></html>"))
 	})
