@@ -117,14 +117,14 @@
 
 			let url = new URL(image_url, location.href);
 			if ( url.origin !== location.origin ) {
-				att_id.body.append("url", image_url);
+				att_id.body.append("url", url.toString());
 				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
 				att_id = await att_id.json();
 				imageAttachments[image_url] = att_id.filename;
 				return att_id.filename;
 			}
 
-			let blob = await fetch(image_url);
+			let blob = await fetch(url);
 			blob = await blob.blob();
 
 			if ( blob.type.substr(0,6) != "image/" ) {
