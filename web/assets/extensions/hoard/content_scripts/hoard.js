@@ -101,13 +101,89 @@
 			rm(sc);
 		}
 
+		let imageAttachments = {};
+		let attachImg = async (image_url) => {
+			if ( imageAttachments.hasOwnProperty(image_url) ) {
+				return imageAttachments[image_url];
+			}
+			console.log("getting image url ", image_url);
+
+			let att_id = {method: "POST", body: new FormData()}
+			att_id.body.append("api_key", API_KEY);
+			att_id.body.append("doc_id", doc_id.id);
+
+			let url = new URL(image_url, location.href);
+			if ( url.origin !== location.origin ) {
+				console.log("proxying url ", image_url);
+				att_id.body.append("url", image_url);
+				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
+				att_id = await att_id.json();
+				imageAttachments[image_url] = att_id.filename;
+				return att_id.filename;
+			}
+
+			let blob = await fetch(image_url);
+			blob = await blob.blob();
+
+			if ( blob.type.substr(0,6) != "image/" ) {
+				throw "unknown mime type '" + blob.type + "'";
+			}
+
+			att_id.body.append("ext", blob.type.substr(6));
+			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
+			att_id = await att_id.json();
+			let filename = att_id.filename;
+			att_id = att_id.attachment_id;
+			console.log("filename: ", filename);
+			imageAttachments[image_url] = filename;
+
+			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, blob, {
+				"api_key": API_KEY,
+				"doc_id": doc_id.id,
+				"att_id": att_id,
+			});
+
+			return imageAttachments[image_url];
+		};
+		let tryAttach = async (u) => {
+			if ( u.substr(0,5) != "data:" ) {
+				try {
+					let s = await attachImg(u)
+				} catch ( _e ) { console.error(_e); }
+			}
+		};
+
+
+		for ( let img of document.images ) {
+			await tryAttach(img.src);
+			for ( let srcs of img.srcset.split(",") ) {
+				srcs = srcs.trim().split(" ");
+				await tryAttach(srcs[0]);
+			}
+		}
+		for ( let img of doc.images ) {
+			if ( imageAttachments.hasOwnProperty(img.src) ) {
+				console.log("replacing url ", img.src, " with ", imageAttachments[img.src]);
+				img.src = imageAttachments[img.src];
+			}
+			let srcset = [];
+			for ( let srcs of img.srcset.split(",") ) {
+				srcs = srcs.trim().split(" ");
+				if ( imageAttachments.hasOwnProperty(srcs[0]) ) {
+					console.log("replacing srcset url ", srcs[0], " with ", imageAttachments[srcs[0]]);
+					srcs[0] = imageAttachments[srcs[0]];
+				}
+				srcset.push(srcs.join(" "));
+			}
+			img.srcset = srcset.join(", ");
+		}
+
 		let cssAttachments = {};
 		let attachCSS = async (stylesheet) => {
-			console.log("Attaching CSS ", stylesheet.href);
 			if ( !stylesheet.href || cssAttachments.hasOwnProperty(stylesheet.href) ) {
-				console.log("reattach limbs, not style sheets");
 				return cssAttachments[stylesheet.href];
 			}
+			console.log("Attaching CSS ", stylesheet.href);
 
 			let att_id = {method: "POST", body: new FormData()}
 			att_id.body.append("api_key", API_KEY);
@@ -131,7 +207,7 @@
 						attcnt += rule.cssText;
 					}
 				}
-			} catch ( _e ) { }
+			} catch ( _e ) { console.error(_e); }
 
 			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, attcnt, {
 				"api_key": API_KEY,

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/thijzert/doc-hoarder/web/plumbing"
 )
@@ -296,6 +298,94 @@ func main() {
 			Message string `json:"_"`
 		}{
 			Message: "Chunk uploaded successfully",
+		}
+		plumbing.WriteJSON(w, res)
+	})
+	mux.HandleFunc("/api/proxy-attachment", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		key := r.FormValue("api_key")
+		if len(key) < 32 {
+			w.WriteHeader(401)
+			return
+		}
+		// TODO: check API key
+
+		draft_id := strings.ToLower(r.FormValue("doc_id"))
+		_, err := hex.DecodeString(draft_id)
+		if err != nil || len(draft_id) != 10 {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
+			return
+		}
+		// TODO: check that the document has draft status, and that it's yours
+
+		// TODO: proxy URL
+		proxy_url := r.FormValue("url")
+		if _, err := url.Parse(proxy_url); err != nil || proxy_url == "" {
+			w.WriteHeader(400)
+			fmt.Fprintf(w, "invalid url '%s'", proxy_url)
+			return
+		}
+
+		pcl := &http.Client{
+			Timeout: 15 * time.Second,
+		}
+		response, err := pcl.Get(proxy_url)
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+		ct := response.Header.Get("Content-Type")
+		exts, err := mime.ExtensionsByType(ct)
+
+		if ct == "" || err != nil || len(exts) == 0 {
+			w.WriteHeader(400)
+			plumbing.JSONMessage(w, "unknown mime type")
+			return
+		}
+		if ct != "text/css" && (len(ct) < 6 || ct[:6] != "image/") {
+			w.WriteHeader(400)
+			plumbing.JSONMessage(w, "subresource has invalid mime type '%s'", ct)
+			return
+		}
+
+		ext := exts[0][1:]
+		if ct == "image/jpeg" {
+			// HACK: I don't like the default JPEG extension
+			ext = "jpeg"
+		}
+
+		// Generate new attachment ID
+		var b []byte = make([]byte, 5)
+		rand.Read(b)
+		attid_s := hex.EncodeToString(b)
+
+		// TODO: check for collisions
+
+		os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
+
+		f, err := os.Create(path.Join("doc", "g"+draft_id, "att", "t"+attid_s+"."+ext))
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+		_, err = io.Copy(f, response.Body)
+		if err != nil {
+			w.WriteHeader(500)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+		f.Close()
+
+		res := struct {
+			ID       string `json:"attachment_id"`
+			Filename string `json:"filename"`
+		}{
+			ID:       attid_s,
+			Filename: "att/t" + attid_s + "." + ext,
 		}
 		plumbing.WriteJSON(w, res)
 	})
