@@ -383,17 +383,17 @@ func main() {
 		// TODO: check that the document has draft status, and that it's yours
 
 		// TODO: proxy URL
-		proxy_url := r.FormValue("url")
-		if _, err := url.Parse(proxy_url); err != nil || proxy_url == "" {
+		proxy_url, err := url.Parse(r.FormValue("url"))
+		if err != nil || r.FormValue("url") == "" || (proxy_url.Scheme != "https" && proxy_url.Scheme != "http") {
 			w.WriteHeader(400)
-			fmt.Fprintf(w, "invalid url '%s'", proxy_url)
+			fmt.Fprintf(w, "invalid url '%s'", r.FormValue("url"))
 			return
 		}
 
 		pcl := &http.Client{
 			Timeout: 15 * time.Second,
 		}
-		response, err := pcl.Get(proxy_url)
+		response, err := pcl.Get(proxy_url.String())
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintf(w, "%v", err)
