@@ -527,8 +527,10 @@ func main() {
 		io.Copy(w, f)
 	})
 
+	listenAddr := "localhost:2690"
+	log.Printf("Listening on %s", listenAddr)
 	srv := &http.Server{
-		Addr:    "localhost:2690",
+		Addr:    listenAddr,
 		Handler: mux,
 	}
 	log.Fatal(srv.ListenAndServe())
