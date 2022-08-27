@@ -110,7 +110,7 @@ func compile(ctx context.Context, conf compileConfig) error {
 		}
 
 		for _, fi := range fis {
-			if !fi.IsDir() || fi.Name() == "" || fi.Name()[:1] == "." {
+			if !fi.IsDir() || fi.Name() == "" || fi.Name()[:1] == "." || fi.Name()[:1] == "_" {
 				continue
 			}
 			err = buildBrowserExt(ctx, conf, fi.Name())

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -27,6 +28,11 @@ func main() {
 	u, err := url.Parse(BaseURL)
 	if err == nil {
 		Domain = u.Host
+	}
+
+	if buildInfo, ok := debug.ReadBuildInfo(); ok {
+		log.Printf("Git version: %s %s", buildInfo.Main.Version, buildInfo.Main.Sum)
+		log.Printf("Path: %s", buildInfo.Main.Path)
 	}
 
 	mux := http.NewServeMux()
@@ -84,7 +90,7 @@ func main() {
 			return
 		}
 
-		ext, err := plumbing.GetAsset(path.Join("extensions", extName[:len(extName)-4]+"-signed.xpi"))
+		ext, err := plumbing.GetAsset(path.Join("extensions", "_signed", extName))
 		if err != nil {
 			ext, err = plumbing.GetAsset(path.Join("extensions", extName))
 		}
