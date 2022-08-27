@@ -79,7 +79,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			runArgs := append([]string{"cmd/hoard/hoard"}, flag.Args()...)
+			runArgs := append([]string{"build/hoard"}, flag.Args()...)
 			return passthru(ctx, runArgs...)
 		}
 	} else {
@@ -160,9 +160,9 @@ func compile(ctx context.Context, conf compileConfig) error {
 	os.Chdir("../..")
 
 	// Build main executable
-	execOutput := "cmd/hoard/hoard"
+	execOutput := "build/hoard"
 	if runtime.GOOS == "windows" || conf.GOOS == "windows" {
-		execOutput = "cmd/hoard/hoard.exe"
+		execOutput = "build/hoard.exe"
 	}
 
 	gofiles, err := filepath.Glob("cmd/hoard/*.go")
