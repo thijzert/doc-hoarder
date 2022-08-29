@@ -34,3 +34,39 @@ func JSONMessage(w http.ResponseWriter, format string, elems ...interface{}) {
 		Message string `json:"_"`
 	}{fmt.Sprintf(format, elems...)})
 }
+
+type HTTPStatuser interface {
+	StatusCode() int
+}
+
+func HTMLError(w http.ResponseWriter, err error) {
+	JSONError(w, err)
+}
+
+func JSONError(w http.ResponseWriter, err error) {
+	st := 500
+	if s, ok := err.(HTTPStatuser); ok {
+		st = s.StatusCode()
+	}
+
+	w.WriteHeader(st)
+	JSONMessage(w, "%s", err.Error())
+}
+
+type errUnauth struct{}
+
+func (errUnauth) Error() string   { return "an API key is required for this request" }
+func (errUnauth) StatusCode() int { return 401 }
+
+var ErrUnauthorised error = errUnauth{}
+
+type errBad struct {
+	Message string
+}
+
+func (errBad) Error() string   { return "bad request" }
+func (errBad) StatusCode() int { return 400 }
+
+func BadRequest(format string, elems ...interface{}) error {
+	return errBad{fmt.Sprintf(format, elems...)}
+}

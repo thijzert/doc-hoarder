@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crypto/rand"
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thijzert/doc-hoarder/internal/storage"
 	"github.com/thijzert/doc-hoarder/web/plumbing"
 )
 
@@ -32,6 +33,11 @@ func main() {
 
 	log.Printf("Doc-hoarder version %s", Version)
 
+	docStore, err := storage.GetDocStore("")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -39,6 +45,15 @@ func main() {
 		w.Write([]byte("<p>Hello, world</p>\n"))
 
 		w.Write([]byte("<p><a href=\"ext/hoard.xpi\">Download browser extension</a></p>\n"))
+
+		docids, err := docStore.DocumentIDs(r.Context())
+		if err == nil {
+			w.Write([]byte("<ul>\n"))
+			for _, docid := range docids {
+				fmt.Fprintf(w, "\t<li><a href=\"documents/view/g%s/\">g%s</a></li>\n", docid, docid)
+			}
+			w.Write([]byte("</ul>\n"))
+		}
 
 		w.Write([]byte("</body></html>"))
 	})
@@ -117,68 +132,69 @@ func main() {
 		}
 		// TODO: check API key
 
-		var b []byte = make([]byte, 5)
-		rand.Read(b)
-
-		// TODO: check for collisions
+		docid, err := docStore.NewDocumentID(r.Context())
+		if err != nil {
+			plumbing.JSONError(w, err)
+			return
+		}
 
 		res := struct {
 			ID string `json:"id"`
 		}{
-			ID: hex.EncodeToString(b),
+			ID: docid,
 		}
 		plumbing.WriteJSON(w, res)
 	})
-	mux.HandleFunc("/api/new-attachment", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 
+	draftAPI := func(r *http.Request) (storage.DocTransaction, error) {
 		key := r.FormValue("api_key")
 		if len(key) < 32 {
-			w.WriteHeader(401)
-			return
+			return nil, plumbing.ErrUnauthorised
 		}
 		// TODO: check API key
 
 		draft_id := strings.ToLower(r.FormValue("doc_id"))
 		_, err := hex.DecodeString(draft_id)
 		if err != nil || len(draft_id) != 10 {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
-			return
+			return nil, plumbing.BadRequest("invalid draft ID")
 		}
 		// TODO: check that the document has draft status, and that it's yours
+
+		trns, err := docStore.GetDocument(draft_id)
+		if err != nil {
+			return nil, err
+		}
+
+		return trns, nil
+	}
+	mux.HandleFunc("/api/new-attachment", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		trns, err := draftAPI(r)
+		if err != nil {
+			plumbing.JSONError(w, err)
+			return
+		}
 
 		ext := strings.ToLower(r.FormValue("ext"))
 		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "Invalid extension '%s'", ext)
+			plumbing.JSONError(w, plumbing.BadRequest("Invalid extension '%s'", ext))
 			return
 		}
-		// TODO: check that the document has draft status, and that it's yours
 
-		// Generate new attachment ID
-		var b []byte = make([]byte, 5)
-		rand.Read(b)
-		attid_s := hex.EncodeToString(b)
-
-		// TODO: check for collisions
-
-		os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
-
-		f, err := os.Create(path.Join("doc", "g"+draft_id, "att", "t"+attid_s+"."+ext))
-		defer f.Close()
+		attid_s, err := trns.NewAttachmentID(r.Context(), ext)
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+			plumbing.JSONError(w, err)
 			return
 		}
+		attName := "t" + attid_s + "." + ext
 
 		res := struct {
 			ID       string `json:"attachment_id"`
 			Filename string `json:"filename"`
 		}{
 			ID:       attid_s,
-			Filename: "att/t" + attid_s + "." + ext,
+			Filename: "att/" + attName,
 		}
 		plumbing.WriteJSON(w, res)
 	})
@@ -186,21 +202,11 @@ func main() {
 	mux.HandleFunc("/api/upload-draft", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		key := r.FormValue("api_key")
-		if len(key) < 32 {
-			w.WriteHeader(401)
+		trns, err := draftAPI(r)
+		if err != nil {
+			plumbing.JSONError(w, err)
 			return
 		}
-		// TODO: check API key
-
-		draft_id := strings.ToLower(r.FormValue("doc_id"))
-		_, err := hex.DecodeString(draft_id)
-		if err != nil || len(draft_id) != 10 {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
-			return
-		}
-		// TODO: check that the document has draft status, and that it's yours
 
 		f, _, err := r.FormFile("document")
 		if err != nil {
@@ -209,14 +215,7 @@ func main() {
 			return
 		}
 
-		err = os.MkdirAll(path.Join("doc", "g"+draft_id), 0755)
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-
-		g, err := os.OpenFile(path.Join("doc", "g"+draft_id, "document.bin"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		g, err := trns.WriteRootFile(r.Context(), "document.bin")
 		if err != nil {
 			w.WriteHeader(500)
 			fmt.Fprintf(w, "%v", err)
@@ -241,64 +240,48 @@ func main() {
 	mux.HandleFunc("/api/upload-attachment", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		key := r.FormValue("api_key")
-		if len(key) < 32 {
-			w.WriteHeader(401)
+		trns, err := draftAPI(r)
+		if err != nil {
+			plumbing.JSONError(w, err)
 			return
 		}
-		// TODO: check API key
-
-		draft_id := strings.ToLower(r.FormValue("doc_id"))
-		_, err := hex.DecodeString(draft_id)
-		if err != nil || len(draft_id) != 10 {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
-			return
-		}
-		// TODO: check that the document has draft status, and that it's yours
 
 		att_id := strings.ToLower(r.FormValue("att_id"))
-		_, err = hex.DecodeString(att_id)
-		if err != nil || len(att_id) != 10 {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "att_id: '%s' -> %v", att_id, err)
+		attName, err := storage.AttachmentNameFromID(r.Context(), trns, att_id)
+		if err != nil {
+			plumbing.JSONError(w, plumbing.BadRequest("invalid attachment ID"))
 			return
 		}
+
+		var b bytes.Buffer
+		if r.FormValue("truncate") != "1" {
+			curr, err := trns.ReadAttachment(r.Context(), attName)
+			if err != nil {
+				plumbing.JSONError(w, err)
+				return
+			}
+			io.Copy(&b, curr)
+			curr.Close()
+		}
+
 		// TODO: check that this attachment ID was created beforehand
 
 		f, _, err := r.FormFile("attachment")
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+			plumbing.JSONError(w, err)
 			return
 		}
 
-		err = os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
-		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-
-		var g *os.File
-		for _, ext := range []string{"css", "svg", "png", "jpeg", "svg"} {
-			g, err = os.OpenFile(path.Join("doc", "g"+draft_id, "att", fmt.Sprintf("t%s.%s", att_id, ext)), os.O_APPEND|os.O_WRONLY, 0644)
-			if err == nil {
-				break
-			}
-		}
-
+		g, err := trns.WriteAttachment(r.Context(), attName)
 		if g == nil || err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+			plumbing.JSONError(w, err)
 			return
 		}
 		defer g.Close()
 
 		_, err = io.Copy(g, f)
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+			plumbing.JSONError(w, err)
 			return
 		}
 
@@ -312,77 +295,41 @@ func main() {
 	mux.HandleFunc("/api/download-attachment", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		key := r.FormValue("api_key")
-		if len(key) < 32 {
-			w.WriteHeader(401)
+		trns, err := draftAPI(r)
+		if err != nil {
+			plumbing.JSONError(w, err)
 			return
 		}
-		// TODO: check API key
-
-		draft_id := strings.ToLower(r.FormValue("doc_id"))
-		_, err := hex.DecodeString(draft_id)
-		if err != nil || len(draft_id) != 10 {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
-			return
-		}
-		// TODO: check that the document has draft status, and that it's yours
 
 		att_id := strings.ToLower(r.FormValue("att_id"))
-		_, err = hex.DecodeString(att_id)
-		if err != nil || len(att_id) != 10 {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "att_id: '%s' -> %v", att_id, err)
-			return
-		}
-		// TODO: check that this attachment ID was created beforehand
-
-		err = os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
+		attName, err := storage.AttachmentNameFromID(r.Context(), trns, att_id)
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+			plumbing.JSONError(w, plumbing.BadRequest("invalid attachment ID"))
 			return
 		}
 
-		var g *os.File
-		for _, ext := range []string{"css", "svg", "png", "jpeg", "svg"} {
-			g, err = os.Open(path.Join("doc", "g"+draft_id, "att", fmt.Sprintf("t%s.%s", att_id, ext)))
-			if err == nil {
-				t := mime.TypeByExtension("." + ext)
-				if t != "" {
-					w.Header().Set("Content-Type", t)
-				}
-				break
-			}
-		}
-
-		if g == nil || err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+		g, err := trns.ReadAttachment(r.Context(), attName)
+		if err != nil {
+			plumbing.JSONError(w, err)
 			return
 		}
 		defer g.Close()
+
+		t := mime.TypeByExtension(path.Ext(attName))
+		if t != "" {
+			w.Header().Set("Content-Type", t)
+		}
 
 		io.Copy(w, g)
 	})
 	mux.HandleFunc("/api/proxy-attachment", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		key := r.FormValue("api_key")
-		if len(key) < 32 {
-			w.WriteHeader(401)
+		trns, err := draftAPI(r)
+		if err != nil {
+			plumbing.JSONError(w, err)
 			return
 		}
-		// TODO: check API key
-
-		draft_id := strings.ToLower(r.FormValue("doc_id"))
-		_, err := hex.DecodeString(draft_id)
-		if err != nil || len(draft_id) != 10 {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "doc_id: '%s' -> %v", draft_id, err)
-			return
-		}
-		// TODO: check that the document has draft status, and that it's yours
 
 		// TODO: proxy URL
 		proxy_url, err := url.Parse(r.FormValue("url"))
@@ -421,25 +368,22 @@ func main() {
 			ext = "jpeg"
 		}
 
-		// Generate new attachment ID
-		var b []byte = make([]byte, 5)
-		rand.Read(b)
-		attid_s := hex.EncodeToString(b)
-
-		// TODO: check for collisions
-
-		os.MkdirAll(path.Join("doc", "g"+draft_id, "att"), 0755)
-
-		f, err := os.Create(path.Join("doc", "g"+draft_id, "att", "t"+attid_s+"."+ext))
+		attid_s, err := trns.NewAttachmentID(r.Context(), ext)
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+			plumbing.JSONError(w, err)
 			return
 		}
+		attName := "t" + attid_s + "." + ext
+
+		f, err := trns.WriteAttachment(r.Context(), attName)
+		if err != nil {
+			plumbing.JSONError(w, err)
+			return
+		}
+
 		_, err = io.Copy(f, response.Body)
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
+			plumbing.JSONError(w, err)
 			return
 		}
 		f.Close()
@@ -449,7 +393,7 @@ func main() {
 			Filename string `json:"filename"`
 		}{
 			ID:       attid_s,
-			Filename: "att/t" + attid_s + "." + ext,
+			Filename: "att/" + attName,
 		}
 		plumbing.WriteJSON(w, res)
 	})
@@ -476,46 +420,38 @@ func main() {
 			return
 		}
 
-		if len(parts) >= 6 && parts[4] == "att" {
-			var attid int64
-			var ext string
-			_, err := fmt.Sscanf(parts[5], "t%010x.%s", &attid, &ext)
-			if err != nil || strings.ContainsAny(parts[5], "/ \n\r\x00") {
-				w.WriteHeader(404)
-				fmt.Fprintf(w, "%v", err)
-				return
-			}
-
-			file_path := path.Join("doc", fmt.Sprintf("g%010x", docid), "att", parts[5])
-			f, err := os.Open(file_path)
-			if err != nil {
-				w.WriteHeader(404)
-				fmt.Fprintf(w, "%v", err)
-				return
-			}
-
-			if ext == "css" {
-				w.Header().Set("Content-Type", "text/css")
-			} else if ext == "svg" {
-				w.Header().Set("Content-Type", "image/svg+xml")
-			} else if ext == "png" || ext == "jpeg" {
-				w.Header().Set("Content-Type", "image/"+ext)
-			} else {
-				w.WriteHeader(403)
-				fmt.Fprintf(w, "%v", err)
-				return
-			}
-
-			fi, err := f.Stat()
-			if err == nil {
-				w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
-			}
-			io.Copy(w, f)
+		trns, err := docStore.GetDocument(fmt.Sprintf("%10x", docid))
+		if err != nil {
+			plumbing.HTMLError(w, err)
 			return
 		}
 
-		file_path := path.Join("doc", fmt.Sprintf("g%010x", docid), "document.bin")
-		f, err := os.Open(file_path)
+		if len(parts) >= 6 && parts[4] == "att" {
+			f, err := trns.ReadAttachment(r.Context(), parts[5])
+			if err != nil {
+				plumbing.JSONError(w, err)
+				return
+			}
+			defer f.Close()
+
+			t := mime.TypeByExtension(path.Ext(parts[5]))
+			if t == "text/css" || strstr(t, "image/") || strstr(t, "text/css;") {
+				w.Header().Set("Content-Type", t)
+				if g, ok := f.(*os.File); ok {
+					fi, err := g.Stat()
+					if err == nil {
+						w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+					}
+				}
+				io.Copy(w, f)
+			} else {
+				w.WriteHeader(403)
+				fmt.Fprintf(w, "disallowed type '%s'", t)
+			}
+			return
+		}
+
+		f, err := trns.ReadRootFile(r.Context(), "document.bin")
 		if err != nil {
 			w.WriteHeader(404)
 			fmt.Fprintf(w, "%v", err)
@@ -525,9 +461,11 @@ func main() {
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline' 'self'")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-		fi, err := f.Stat()
-		if err == nil {
-			w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+		if g, ok := f.(*os.File); ok {
+			fi, err := g.Stat()
+			if err == nil {
+				w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
+			}
 		}
 		io.Copy(w, f)
 	})
