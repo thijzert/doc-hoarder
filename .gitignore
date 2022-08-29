@@ -2,4 +2,5 @@ cmd/hoard/hoard
 cmd/hoard/hoard.exe
 /build
 web/assets/extensions/*.xpi
+web/assets/extensions/_signed/*.xpi
 /web/plumbing/assets.go

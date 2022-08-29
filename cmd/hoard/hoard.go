@@ -66,14 +66,19 @@ func main() {
 			Version    string `json:"version"`
 			UpdateLink string `json:"update_link"`
 		}
+		type addonInfo struct {
+			Updates []versionInfo `json:"updates"`
+		}
 		rv := struct {
-			Addons map[string][]versionInfo `json:"addons"`
-		}{make(map[string][]versionInfo)}
+			Addons map[string]addonInfo `json:"addons"`
+		}{make(map[string]addonInfo)}
 
 		addonList := []string{"hoard"}
 		for _, addon := range addonList {
-			rv.Addons[addon+"@"+Domain] = []versionInfo{
-				versionInfo{Version, BaseURL + "ext/" + addon + ".xpi"},
+			rv.Addons[addon+"@"+Domain] = addonInfo{
+				Updates: []versionInfo{
+					versionInfo{Version, BaseURL + "ext/" + addon + ".xpi"},
+				},
 			}
 		}
 
