@@ -29,6 +29,16 @@
 		rm(doc.querySelectorAll(".article-actions"));
 		rm(doc.querySelectorAll(".mdn-cta-container"));
 	}});
+	siteHooks.push({re: new RegExp("^https://(www\.)?ah\.nl/(allerhande/recept|recepten)/.*$"), fn: (doc) => {
+		for ( let hroot of doc.querySelectorAll("#navigation-header > *[class^=header_root_]") ) {
+			hroot.style.position = "static";
+			hroot.style.tranform = "none";
+		}
+		rm(doc.querySelectorAll("#navigation-header > *[class^=header_root_] > *[class^=top-bar_root_"));
+		rm(doc.querySelectorAll("#navigation-header > *[class^=header_placeholder_]"));
+		rm(doc.querySelectorAll("button[class^=back-to-top_]"));
+		rm(doc.querySelectorAll("button[class^=play-button_root_]"));
+	}});
 
 
 	const parser = new DOMParser();
