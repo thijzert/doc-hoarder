@@ -205,8 +205,9 @@
 				style_cnt.body.append("att_id", att_id);
 				style_cnt = await fetch(BASE_URL + "api/download-attachment", style_cnt)
 				style_cnt = await style_cnt.blob();
+				style_cnt = await style_cnt.text();
 				stylesheet = new CSSStyleSheet();
-				stylesheet.replaceSync(style_cnt.toString());
+				stylesheet.replaceSync(style_cnt);
 			} else {
 				att_id = {method: "POST", body: new FormData()}
 				att_id.body.append("api_key", API_KEY);

@@ -255,22 +255,26 @@ func main() {
 
 		var b bytes.Buffer
 		if r.FormValue("truncate") != "1" {
+			// Read current contents into the buffer - the request contents will get appended
 			curr, err := trns.ReadAttachment(r.Context(), attName)
+			if err == nil {
+				_, err = io.Copy(&b, curr)
+			}
 			if err != nil {
 				plumbing.JSONError(w, err)
 				return
 			}
-			io.Copy(&b, curr)
 			curr.Close()
 		}
-
-		// TODO: check that this attachment ID was created beforehand
 
 		f, _, err := r.FormFile("attachment")
 		if err != nil {
 			plumbing.JSONError(w, err)
 			return
 		}
+		defer f.Close()
+
+		io.Copy(&b, f)
 
 		g, err := trns.WriteAttachment(r.Context(), attName)
 		if g == nil || err != nil {
@@ -279,7 +283,7 @@ func main() {
 		}
 		defer g.Close()
 
-		_, err = io.Copy(g, f)
+		_, err = io.Copy(g, &b)
 		if err != nil {
 			plumbing.JSONError(w, err)
 			return
