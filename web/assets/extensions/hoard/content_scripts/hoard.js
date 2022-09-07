@@ -271,6 +271,27 @@
 			}
 		}
 
+
+		// Remove scripting attributes (onclick, onload, onerror, etc)
+		let rmAttr = {};
+		for ( let elt of doc.querySelectorAll("*") ) {
+			if ( elt.attributes.length == 0 ) {
+				continue;
+			}
+			let found = false;
+			for ( let att of elt.attributes ) {
+				if ( att.name.substr(0,2) == "on" ) {
+					rmAttr[att.name] = 1;
+					found = true;
+				}
+			}
+			if ( found ) {
+				for ( let att in rmAttr ) {
+					elt.removeAttribute(att);
+				}
+			}
+		}
+
 		contents = formatDTD(document.doctype) + "\n" + doc.body.parentNode.outerHTML;
 
 
