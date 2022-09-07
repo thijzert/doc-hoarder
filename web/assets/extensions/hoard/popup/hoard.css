@@ -31,6 +31,25 @@ html, body {
 	background-color: #EAEA9D;
 }
 
+#settings[open] {
+	padding: .5rem;
+	border: 0.0625rem solid #bfbfbf;
+}
+#settings > summary {
+	font-size: .8rem;
+}
+#settings .formfield {
+	margin-bottom: 1rem;
+}
+#settings .formfield label {
+	display: block;
+	font-size: .8rem;
+}
+#settings .formfield input, #settings .formfield select {
+	box-sizing: border-box;
+	width: 100%;
+}
+
 #error-log > div {
 	transition: opacity 0.5s;
 }

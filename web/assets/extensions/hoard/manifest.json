@@ -11,6 +11,7 @@
 	},
 
 	"permissions": [
+		"storage",
 		"https://xxxxxxxxxxxxxxxxxxxxxxxx/*",
 		"activeTab"
 	],

@@ -88,9 +88,9 @@
 		} while ( idx < contents.size );
 	}
 
-	const flatten = async () => {
+	const flatten = async (apikey) => {
 		const BASE_URL = "https://xxxxxxxxxxxxxxxxxxxxxxxx";
-		const API_KEY = "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy";
+		const API_KEY = apikey;
 
 		let with_apikey = {method: "POST", body: new FormData()}
 		with_apikey.body.append("api_key", API_KEY);
@@ -312,7 +312,7 @@
 	browser.runtime.onMessage.addListener(async (message) => {
 		console.log("Got message", message);
 		if (message.command === "flatten") {
-			return await flatten();
+			return await flatten(message.apikey);
 		}
 	});
 

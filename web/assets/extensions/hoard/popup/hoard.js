@@ -39,11 +39,19 @@ const logMessage = (msg, ...classes) => {
  * the content script in the page.
  */
 const listenForClicks = () => {
+	let apikeyInput = document.querySelector("#settings #apikey") || document.createElement("input");
+	let saveApiKey = async (e) => {
+		await browser.storage.sync.set({"hoard-api-key": apikeyInput.value});
+	};
+	apikeyInput.addEventListener("keyup", saveApiKey);
+	apikeyInput.addEventListener("change", saveApiKey);
+
 	document.addEventListener("click", async (e) => {
 
 		const flatten = async (tabs) => {
 			let rv = await browser.tabs.sendMessage(tabs[0].id, {
-				command: "flatten"
+				command: "flatten",
+				apikey: apikeyInput.value
 			});
 
 			if ( rv ) {
@@ -67,7 +75,9 @@ const listenForClicks = () => {
 		let actionName = "action";
 		try {
 			let currentTab = await browser.tabs.query({active: true, currentWindow: true})
-			if ( e.target.classList.contains("flatten") ) {
+			if ( !e.target.classList.contains("button") ) {
+			} else if ( e.target.classList.contains("disabled") ) {
+			} else if ( e.target.classList.contains("flatten") ) {
 				actionName = "flatten"
 				await flatten(currentTab);
 			} else {
@@ -90,6 +100,31 @@ function reportExecuteScriptError(error) {
 	console.error(`Failed to execute content script: ${error.message}`);
 }
 
+
+(async () => {
+	let apikey = await browser.storage.sync.get("hoard-api-key");
+	apikey = apikey["hoard-api-key"];
+	if ( typeof apikey != "string" ) {
+		apikey = "";
+	}
+
+	let input = document.querySelector("#settings #apikey");
+	console.log("apikey ", apikey, " ; input ", input);
+	if ( input ) {
+		input.value = apikey;
+	}
+	if ( typeof apikey != "string" || apikey.length < 10 ) {
+		let s = document.getElementById("settings");
+		if ( s ) {
+			s.open = true;
+			if ( input ) {
+				input.focus();
+			}
+		}
+	}
+})()
+
+
 /**
  * When the popup loads, inject a content script into the active tab,
  * and add a click handler.
@@ -98,6 +133,7 @@ function reportExecuteScriptError(error) {
 browser.tabs.executeScript({file: "/content_scripts/hoard.js"})
 	.then(listenForClicks)
 	.catch(reportExecuteScriptError);
+
 
 console.log("hello, world");
 
