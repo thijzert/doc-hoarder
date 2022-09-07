@@ -288,6 +288,7 @@ func browserExtRecurse(ctx context.Context, conf compileConfig, extName, dir str
 			jss := string(contents)
 
 			jss = strings.Replace(jss, "\"x.y.z-w-gdeadbeef\"", fmt.Sprintf("\"%s\"", conf.Version), -1)
+			jss = strings.Replace(jss, " x.y.z-w-gdeadbeef<", fmt.Sprintf(" %s<", conf.Version), -1)
 			jss = strings.Replace(jss, "@xxxxxxxxxxxxxxxxxxxxxxxx", fmt.Sprintf("@%s", conf.Domain), -1)
 			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx\"", fmt.Sprintf("\"%s\"", conf.BaseURL), -1)
 			jss = strings.Replace(jss, "\"https://xxxxxxxxxxxxxxxxxxxxxxxx/ext/", fmt.Sprintf("\"%sext/", conf.BaseURL), -1)

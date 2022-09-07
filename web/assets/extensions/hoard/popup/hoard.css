@@ -39,3 +39,9 @@ html, body {
 	border: 0.0625rem dashed rgba(255,64,64,0.3);
 }
 
+footer {
+	font-size: 60%;
+	color: #606060;
+	text-align: center;
+}
+
