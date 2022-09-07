@@ -4,13 +4,17 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -21,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	jwt "github.com/golang-jwt/jwt/v4"
 	"github.com/pkg/errors"
 	"github.com/thijzert/go-resemble"
 )
@@ -32,9 +37,13 @@ type compileConfig struct {
 	Quick       bool
 	BaseURL     string
 	Domain      string
-	Version     string
-	GOOS        string
-	GOARCH      string
+	AMO         struct {
+		Issuer string
+		Secret string
+	} `json:"-"`
+	Version string
+	GOOS    string
+	GOARCH  string
 }
 
 func main() {
@@ -48,6 +57,8 @@ func main() {
 	flag.BoolVar(&conf.Development, "development", false, "Create a development build")
 	flag.BoolVar(&conf.Quick, "quick", false, "Create a development build")
 	flag.StringVar(&conf.BaseURL, "base-url", "", "Base address where this application will run")
+	flag.StringVar(&conf.AMO.Issuer, "amo-issuer", "", "Issuer ID for API key for addons.mozilla.org")
+	flag.StringVar(&conf.AMO.Secret, "amo-secret", "", "Secret for API key for addons.mozilla.org")
 	flag.StringVar(&conf.GOARCH, "GOARCH", "", "Cross-compile for architecture")
 	flag.StringVar(&conf.GOOS, "GOOS", "", "Cross-compile for operating system")
 	flag.BoolVar(&watch, "watch", false, "Watch source tree for changes")
@@ -249,8 +260,16 @@ func buildBrowserExt(ctx context.Context, conf compileConfig, extName string) er
 		if err != nil {
 			return err
 		}
-		log.Printf("TODO: submit to AMO")
-		_, err = io.Copy(g, &rv)
+		defer g.Close()
+		if conf.AMO.Issuer != "" {
+			err := signedExtension(ctx, g, conf, extName, &rv)
+			if err != nil {
+				return err
+			}
+		} else {
+			log.Printf("Remember to have this extension signed by Mozilla")
+			_, err = io.Copy(g, &rv)
+		}
 
 		if err != nil {
 			return err
@@ -304,6 +323,162 @@ func browserExtRecurse(ctx context.Context, conf compileConfig, extName, dir str
 }
 
 type brextFileHandler func(fileName string, contents []byte) error
+
+func signedExtension(ctx context.Context, dest io.Writer, conf compileConfig, extName string, xpi io.Reader) error {
+
+	submitted := false
+
+	extStatus := struct {
+		Active           bool `json:"active"`
+		AutomatedSigning bool `json:"automated_signing"`
+		Files            []struct {
+			DownloadURL string `json:"download_url"`
+			Hash        string `json:"hash"`
+			Signed      bool   `json:"signed"`
+		} `json:"files"`
+		PassedReview      bool        `json:"passed_review"`
+		Processed         bool        `json:"processed"`
+		Reviewed          interface{} `json:"reviewed"`
+		Valid             bool        `json:"valid"`
+		ValidationResults interface{} `json:"validation_results"`
+		Version           string      `json:"version"`
+	}{}
+
+	cl := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	versionURL := fmt.Sprintf("https://addons.mozilla.org/api/v5/addons/%s@%s/versions/%s/", extName, conf.Domain, conf.Version)
+
+	for ctx.Err() == nil {
+		r, err := amoRequest(ctx, conf, "GET", versionURL, nil)
+		err = doJson(cl, r, &extStatus)
+		if err != nil {
+			if a, ok := err.(apiError); ok {
+				if a.StatusCode == 404 && !submitted {
+					log.Printf("Submitting %s.xpi to addons.mozilla.org for siging... ", extName)
+
+					var fileUpload bytes.Buffer
+					mp := multipart.NewWriter(&fileUpload)
+					w, err := mp.CreateFormFile("upload", fmt.Sprintf("%s.xpi", extName))
+					if err != nil {
+						return err
+					}
+					_, err = io.Copy(w, xpi)
+					if err != nil {
+						return err
+					}
+					mp.Close()
+
+					r, err := amoRequest(ctx, conf, "PUT", versionURL, &fileUpload)
+					r.Header.Set("Content-Type", "multipart/form-data; boundary="+mp.Boundary())
+					err = doJson(cl, r, &extStatus)
+					if err != nil {
+						return err
+					}
+					submitted = true
+					time.Sleep(8500 * time.Millisecond)
+					continue
+				}
+			}
+			return err
+		}
+
+		// log.Printf("Extension status: %+v", extStatus)
+
+		if len(extStatus.Files) > 0 && extStatus.Files[0].Signed && extStatus.Files[0].DownloadURL != "" {
+			log.Printf("Downloading signed %s.xpi from AMO", extName)
+			r, err := amoRequest(ctx, conf, "GET", extStatus.Files[0].DownloadURL, nil)
+			resp, err := cl.Do(r)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(dest, resp.Body)
+			return err
+		}
+
+		time.Sleep(14500 * time.Millisecond)
+	}
+
+	return ctx.Err()
+}
+
+func amoRequest(ctx context.Context, conf compileConfig, method string, url string, body io.Reader) (*http.Request, error) {
+	// Create the Claims
+	t := time.Now().Unix()
+	claims := &jwt.StandardClaims{
+		Issuer:    conf.AMO.Issuer,
+		Id:        randomString(),
+		IssuedAt:  t,
+		ExpiresAt: t + 90,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	ss, err := token.SignedString([]byte(conf.AMO.Secret))
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	r.Header.Add("Authorization", "JWT "+ss)
+
+	r = r.WithContext(ctx)
+	return r, nil
+}
+
+type apiError struct {
+	StatusCode int
+	More       interface{}
+}
+
+func (a apiError) Error() string {
+	if m, ok := a.More.(map[string]interface{}); ok && len(m) == 1 {
+		if m["error"] != nil {
+			return fmt.Sprintf("http status %d: %s", a.StatusCode, m["error"])
+		} else if m["detail"] != nil {
+			return fmt.Sprintf("http status %d: %s", a.StatusCode, m["detail"])
+		}
+	}
+	return fmt.Sprintf("http status %d", a.StatusCode)
+}
+
+func doJson(cl *http.Client, r *http.Request, res interface{}) error {
+	resp, err := cl.Do(r)
+	if err != nil {
+		return err
+	}
+	dec := json.NewDecoder(resp.Body)
+
+	if resp.StatusCode >= 400 {
+		rv := apiError{StatusCode: resp.StatusCode}
+		dec.Decode(&rv.More)
+		return rv
+	}
+
+	return dec.Decode(res)
+}
+
+func randomString() string {
+	rv := make([]byte, 0, 40)
+	buf := make([]byte, 40)
+	rand.Read(buf)
+	var extraRandom byte = '4' // chosen by fair dice roll
+	for _, c := range buf {
+		c = c & 0x7f
+		if c <= ' ' || c > '~' || c == '\\' || c == '"' {
+			c = extraRandom ^ c
+			if c <= ' ' || c > '~' || c == '\\' || c == '"' {
+				continue
+			}
+		}
+		rv = append(rv, c)
+		extraRandom = c
+	}
+
+	return string(rv)
+}
 
 func passthru(ctx context.Context, argv ...string) error {
 	c := exec.CommandContext(ctx, argv[0], argv[1:]...)
