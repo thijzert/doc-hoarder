@@ -5,11 +5,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"mime"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"strings"
 	"time"
@@ -39,44 +39,33 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte("<!DOCTYPE html>\n<html><head><base href=\".\"></head><body>\n\n"))
-		w.Write([]byte("<p>Hello, world</p>\n"))
-
-		w.Write([]byte("<p><a href=\"ext/hoard.xpi\">Download browser extension</a></p>\n"))
-
+	mux.Handle("/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		docids, err := docStore.DocumentIDs(r.Context())
-		if err == nil {
-			w.Write([]byte("<ul>\n"))
-			for _, docid := range docids {
-				fmt.Fprintf(w, "\t<li><a href=\"documents/view/g%s/\">g%s</a></li>\n", docid, docid)
-			}
-			w.Write([]byte("</ul>\n"))
+		if err != nil {
+			return nil, err
 		}
 
-		w.Write([]byte("</body></html>"))
-	})
+		return docids, nil
+	}), "homepage"))
 
-	mux.HandleFunc("/assets/js/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/assets/js/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		jspath := strings.Replace(r.URL.Path, "./", "-", -1)
 		if len(jspath) < 12 {
-			w.WriteHeader(404)
-			return
+			return nil, plumbing.ErrNotFound
 		}
 
 		js, err := plumbing.GetAsset(jspath[8:])
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
+			return nil, plumbing.ErrNotFound
 		}
 
-		w.Header().Set("Content-Type", "application/javascript")
-		w.Write([]byte(js))
-	})
+		return plumbing.Blob{
+			ContentType: "application/javascript",
+			Contents:    js,
+		}, nil
+	}), "asset"))
 
-	mux.HandleFunc("/ext/updates.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/ext/updates.json", plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		type versionInfo struct {
 			Version    string `json:"version"`
 			UpdateLink string `json:"update_link"`
@@ -97,14 +86,13 @@ func main() {
 			}
 		}
 
-		plumbing.WriteJSON(w, rv)
-	})
-	mux.HandleFunc("/ext/", func(w http.ResponseWriter, r *http.Request) {
+		return rv, nil
+	})))
+	mux.Handle("/ext/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		parts := strings.Split(r.URL.Path, "/")
 		extName := parts[2]
 		if len(extName) < 5 || extName[0] == '.' || extName[len(extName)-4:] != ".xpi" {
-			w.WriteHeader(400)
-			return
+			return nil, plumbing.ErrNotFound
 		}
 
 		ext, err := plumbing.GetAsset(path.Join("extensions", "_signed", extName))
@@ -112,30 +100,25 @@ func main() {
 			ext, err = plumbing.GetAsset(path.Join("extensions", extName))
 		}
 		if err != nil {
-			w.WriteHeader(404)
-			plumbing.WriteJSON(w, err)
-			return
+			return nil, plumbing.ErrNotFound
 		}
 
-		w.Header().Set("Content-Type", "application/x-xpinstall")
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(ext)))
-		w.Write(ext)
-	})
+		return plumbing.Blob{
+			ContentType: "application/x-xpinstall",
+			Contents:    ext,
+		}, nil
+	}), "asset"))
 
-	mux.HandleFunc("/api/new-doc", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
+	mux.Handle("/api/new-doc", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		key := r.FormValue("api_key")
 		if len(key) < 32 {
-			w.WriteHeader(401)
-			return
+			return nil, plumbing.ErrUnauthorised
 		}
 		// TODO: check API key
 
 		docid, err := docStore.NewDocumentID(r.Context())
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		res := struct {
@@ -143,8 +126,8 @@ func main() {
 		}{
 			ID: docid,
 		}
-		plumbing.WriteJSON(w, res)
-	})
+		return res, nil
+	}))))
 
 	draftAPI := func(r *http.Request) (storage.DocTransaction, error) {
 		key := r.FormValue("api_key")
@@ -167,25 +150,20 @@ func main() {
 
 		return trns, nil
 	}
-	mux.HandleFunc("/api/new-attachment", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
+	mux.Handle("/api/new-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		ext := strings.ToLower(r.FormValue("ext"))
 		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" {
-			plumbing.JSONError(w, plumbing.BadRequest("Invalid extension '%s'", ext))
-			return
+			return nil, plumbing.BadRequest("Invalid extension '%s'", ext)
 		}
 
 		attid_s, err := trns.NewAttachmentID(r.Context(), ext)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 		attName := "t" + attid_s + "." + ext
 
@@ -196,38 +174,29 @@ func main() {
 			ID:       attid_s,
 			Filename: "att/" + attName,
 		}
-		plumbing.WriteJSON(w, res)
-	})
+		return res, nil
+	}))))
 
-	mux.HandleFunc("/api/upload-draft", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
+	mux.Handle("/api/upload-draft", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		f, _, err := r.FormFile("document")
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
+			return nil, err
 		}
 
 		g, err := trns.WriteRootFile(r.Context(), "document.bin")
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
+			return nil, err
 		}
 		defer g.Close()
 
 		_, err = io.Copy(g, f)
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
+			return nil, err
 		}
 
 		res := struct {
@@ -235,22 +204,18 @@ func main() {
 		}{
 			Message: "Chunk uploaded successfully",
 		}
-		plumbing.WriteJSON(w, res)
-	})
-	mux.HandleFunc("/api/upload-attachment", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
+		return res, nil
+	}))))
+	mux.Handle("/api/upload-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		att_id := strings.ToLower(r.FormValue("att_id"))
 		attName, err := storage.AttachmentNameFromID(r.Context(), trns, att_id)
 		if err != nil {
-			plumbing.JSONError(w, plumbing.BadRequest("invalid attachment ID"))
-			return
+			return nil, plumbing.BadRequest("invalid attachment ID")
 		}
 
 		var b bytes.Buffer
@@ -261,16 +226,14 @@ func main() {
 				_, err = io.Copy(&b, curr)
 			}
 			if err != nil {
-				plumbing.JSONError(w, err)
-				return
+				return nil, err
 			}
 			curr.Close()
 		}
 
 		f, _, err := r.FormFile("attachment")
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 		defer f.Close()
 
@@ -278,15 +241,13 @@ func main() {
 
 		g, err := trns.WriteAttachment(r.Context(), attName)
 		if g == nil || err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 		defer g.Close()
 
 		_, err = io.Copy(g, &b)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		res := struct {
@@ -294,53 +255,49 @@ func main() {
 		}{
 			Message: "Chunk uploaded successfully",
 		}
-		plumbing.WriteJSON(w, res)
-	})
-	mux.HandleFunc("/api/download-attachment", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
+		return res, nil
+	}))))
+	mux.Handle("/api/download-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		att_id := strings.ToLower(r.FormValue("att_id"))
 		attName, err := storage.AttachmentNameFromID(r.Context(), trns, att_id)
 		if err != nil {
-			plumbing.JSONError(w, plumbing.BadRequest("invalid attachment ID"))
-			return
+			return nil, err
 		}
 
 		g, err := trns.ReadAttachment(r.Context(), attName)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 		defer g.Close()
 
-		t := mime.TypeByExtension(path.Ext(attName))
-		if t != "" {
-			w.Header().Set("Content-Type", t)
+		rv := plumbing.Blob{}
+
+		rv.Contents, err = ioutil.ReadAll(g)
+		if err != nil {
+			return nil, err
 		}
 
-		io.Copy(w, g)
-	})
-	mux.HandleFunc("/api/proxy-attachment", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-
+		t := mime.TypeByExtension(path.Ext(attName))
+		if t != "" {
+			rv.ContentType = t
+		}
+		return rv, nil
+	}))))
+	mux.Handle("/api/proxy-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		// TODO: proxy URL
 		proxy_url, err := url.Parse(r.FormValue("url"))
 		if err != nil || r.FormValue("url") == "" || (proxy_url.Scheme != "https" && proxy_url.Scheme != "http") {
-			w.WriteHeader(400)
-			fmt.Fprintf(w, "invalid url '%s'", r.FormValue("url"))
-			return
+			return nil, plumbing.BadRequest("invalid url '%s'", r.FormValue("url"))
 		}
 
 		pcl := &http.Client{
@@ -348,22 +305,16 @@ func main() {
 		}
 		response, err := pcl.Get(proxy_url.String())
 		if err != nil {
-			w.WriteHeader(500)
-			fmt.Fprintf(w, "%v", err)
-			return
+			return nil, err
 		}
 		ct := response.Header.Get("Content-Type")
 		exts, err := mime.ExtensionsByType(ct)
 
 		if ct == "" || err != nil || len(exts) == 0 {
-			w.WriteHeader(400)
-			plumbing.JSONMessage(w, "unknown mime type")
-			return
+			return nil, plumbing.BadRequest("unknown mime type")
 		}
 		if ct != "text/css" && !strstr(ct, "image/") && !strstr(ct, "text/css;") {
-			w.WriteHeader(400)
-			plumbing.JSONMessage(w, "subresource has invalid mime type '%s'", ct)
-			return
+			return nil, plumbing.BadRequest("subresource has invalid mime type '%s'", ct)
 		}
 
 		ext := exts[0][1:]
@@ -374,21 +325,18 @@ func main() {
 
 		attid_s, err := trns.NewAttachmentID(r.Context(), ext)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 		attName := "t" + attid_s + "." + ext
 
 		f, err := trns.WriteAttachment(r.Context(), attName)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 
 		_, err = io.Copy(f, response.Body)
 		if err != nil {
-			plumbing.JSONError(w, err)
-			return
+			return nil, err
 		}
 		f.Close()
 
@@ -399,80 +347,69 @@ func main() {
 			ID:       attid_s,
 			Filename: "att/" + attName,
 		}
-		plumbing.WriteJSON(w, res)
-	})
+		return res, nil
+	}))))
 
-	mux.HandleFunc("/documents/view/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/documents/view/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		var docid int64
 		parts := strings.Split(r.URL.Path, "/")
 		if len(parts) <= 3 {
-			fmt.Fprintf(w, "Parts: %v", parts)
-			w.WriteHeader(404)
-			return
+			return nil, plumbing.ErrNotFound
 		}
 
 		_, err := fmt.Sscanf(parts[3], "g%010x", &docid)
 		if err != nil {
-			w.WriteHeader(404)
-			fmt.Fprintf(w, "%v", err)
-			return
+			return nil, plumbing.ErrNotFound
 		}
 
 		if len(parts) == 4 {
-			w.Header().Set("Location", fmt.Sprintf("g%010x/", docid))
-			w.WriteHeader(302)
-			return
+			return nil, plumbing.Redirect(302, fmt.Sprintf("g%010x/", docid))
 		}
 
 		trns, err := docStore.GetDocument(fmt.Sprintf("%10x", docid))
 		if err != nil {
-			plumbing.HTMLError(w, err)
-			return
+			return nil, err
 		}
+
+		rv := plumbing.Blob{}
 
 		if len(parts) >= 6 && parts[4] == "att" {
 			f, err := trns.ReadAttachment(r.Context(), parts[5])
 			if err != nil {
-				plumbing.JSONError(w, err)
-				return
+				return nil, err
 			}
 			defer f.Close()
 
 			t := mime.TypeByExtension(path.Ext(parts[5]))
-			if t == "text/css" || strstr(t, "image/") || strstr(t, "text/css;") {
-				w.Header().Set("Content-Type", t)
-				if g, ok := f.(*os.File); ok {
-					fi, err := g.Stat()
-					if err == nil {
-						w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
-					}
-				}
-				io.Copy(w, f)
-			} else {
-				w.WriteHeader(403)
-				fmt.Fprintf(w, "disallowed type '%s'", t)
+			if !(t == "text/css" || strstr(t, "image/") || strstr(t, "text/css;")) {
+				return nil, plumbing.Forbidden("disallowed type '%s'", t)
 			}
-			return
+			rv.ContentType = t
+
+			rv.Contents, err = ioutil.ReadAll(f)
+			if err != nil {
+				return nil, err
+			}
+
+			return rv, nil
 		}
 
 		f, err := trns.ReadRootFile(r.Context(), "document.bin")
 		if err != nil {
-			w.WriteHeader(404)
-			fmt.Fprintf(w, "%v", err)
-			return
+			return nil, plumbing.ErrNotFound
 		}
 
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline' 'self'")
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		rv.ContentType = "text/html; charset=utf-8"
+		rv.Header = make(http.Header)
+		rv.Header.Set("Content-Security-Policy", "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline' 'self'")
 
-		if g, ok := f.(*os.File); ok {
-			fi, err := g.Stat()
-			if err == nil {
-				w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
-			}
+		rv.Contents, err = ioutil.ReadAll(f)
+		if err != nil {
+			return nil, err
 		}
-		io.Copy(w, f)
-	})
+
+		return rv, nil
+	}), "asset"))
 
 	listenAddr := "localhost:2690"
 	log.Printf("Listening on %s", listenAddr)
