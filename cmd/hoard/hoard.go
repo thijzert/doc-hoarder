@@ -46,7 +46,7 @@ func main() {
 		}
 
 		return docids, nil
-	}), "homepage"))
+	}), "page/home"))
 
 	mux.Handle("/assets/js/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		jspath := strings.Replace(r.URL.Path, "./", "-", -1)
@@ -63,7 +63,7 @@ func main() {
 			ContentType: "application/javascript",
 			Contents:    js,
 		}, nil
-	}), "asset"))
+	}), "page/asset"))
 
 	mux.Handle("/ext/updates.json", plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		type versionInfo struct {
@@ -107,7 +107,7 @@ func main() {
 			ContentType: "application/x-xpinstall",
 			Contents:    ext,
 		}, nil
-	}), "asset"))
+	}), "page/asset"))
 
 	mux.Handle("/api/new-doc", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		key := r.FormValue("api_key")
@@ -409,7 +409,7 @@ func main() {
 		}
 
 		return rv, nil
-	}), "asset"))
+	}), "page/asset"))
 
 	listenAddr := "localhost:2690"
 	log.Printf("Listening on %s", listenAddr)

@@ -1,10 +1,14 @@
 package plumbing
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
+	"path"
+	"strings"
 )
 
 type Handler interface {
@@ -101,7 +105,22 @@ type htmlHandler struct {
 }
 
 func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	result, err := h.Handler.Handle(r)
+	tpData := struct {
+		AppRoot      string
+		TemplateName string
+		PageData     interface{}
+	}{
+		AppRoot:      appRoot(r),
+		TemplateName: path.Base(h.TemplateName),
+	}
+
+	rootName := strings.SplitN(h.TemplateName, "/", 2)[0]
+
+	tpl, err := getTemplate(h.TemplateName)
+	if err == nil {
+		tpData.PageData, err = h.Handler.Handle(r)
+	}
+
 	if err != nil {
 		code := 500
 		if sc, ok := err.(HTTPStatuser); ok {
@@ -112,41 +131,64 @@ func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Location", red.Location)
 		}
 
-		headline := "internal server error"
-		message := "an internal error has occurred"
+		npd := struct {
+			Headline string
+			Message  string
+		}{"internal server error", "an internal error has occurred"}
+
 		if um, ok := err.(UserMessager); ok {
-			headline, message = um.ErrorMessage()
+			npd.Headline, npd.Message = um.ErrorMessage()
 		}
+		tpData.PageData = npd
 
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(code)
-		fmt.Fprintf(w, "<!DOCTYPE html>\n<html><head><base href=\".\"></head><body>\n\n")
-		fmt.Fprintf(w, "<h1>%s</h1>", html.EscapeString(headline))
-		fmt.Fprintf(w, "<p>%s</p>", html.EscapeString(message))
+
+		tpl, err := getTemplate("page/error")
+
+		var b bytes.Buffer
+		if err == nil {
+			err = tpl.ExecuteTemplate(&b, rootName, tpData)
+			if err == nil {
+				io.Copy(w, &b)
+				return
+			}
+		}
+
+		fmt.Fprintf(w, "<!DOCTYPE html>\n<html><head><base href=\"%s\"></head><body>\n\n", html.EscapeString(tpData.AppRoot))
+		fmt.Fprintf(w, "<h1>%s</h1>", html.EscapeString(npd.Headline))
+		fmt.Fprintf(w, "<p>%s</p>", html.EscapeString(npd.Message))
 		fmt.Fprintf(w, "</body></html>")
 		return
 	}
 
-	if bl, ok := result.(Blob); ok {
+	if bl, ok := tpData.PageData.(Blob); ok {
 		bl.WriteTo(w)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	w.Write([]byte("<!DOCTYPE html>\n<html><head><base href=\".\"></head><body>\n\n"))
-	w.Write([]byte("<p>Hello, world</p>\n"))
 
-	w.Write([]byte("<p><a href=\"ext/hoard.xpi\">Download browser extension</a></p>\n"))
-
-	if docids, ok := result.([]string); ok {
-		w.Write([]byte("<ul>\n"))
-		for _, docid := range docids {
-			fmt.Fprintf(w, "\t<li><a href=\"documents/view/g%s/\">g%s</a></li>\n", docid, docid)
+	var b bytes.Buffer
+	err = tpl.ExecuteTemplate(&b, rootName, tpData)
+	if err != nil {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, "<!DOCTYPE html>\n<html><head><base href=\"%s\"></head><body>\n\n", html.EscapeString(tpData.AppRoot))
+		fmt.Fprintf(w, "<h1>internal server error</h1>")
+		fmt.Fprintf(w, "<p>An error occurred while displaying this page to you.</p>")
+		if IsDevBuild() {
+			fmt.Fprintf(w, "<section>%s</section>", html.EscapeString(err.Error()))
 		}
-		w.Write([]byte("</ul>\n"))
+		fmt.Fprintf(w, "</body></html>")
+		return
 	}
 
-	w.Write([]byte("</body></html>"))
+	io.Copy(w, &b)
+}
+
+func appRoot(r *http.Request) string {
+	// TODO
+	return "."
 }
 
 type Headerer interface {

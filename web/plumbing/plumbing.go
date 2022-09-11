@@ -6,6 +6,11 @@ import (
 	"net/http"
 )
 
+func IsDevBuild() bool {
+	// TODO: properly
+	return !assetsEmbedded
+}
+
 // AssetsEmbedded indicates whether or not static assets are embedded in this binary
 func AssetsEmbedded() bool {
 	return assetsEmbedded

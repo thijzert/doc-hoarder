@@ -1,0 +1,19 @@
+{{define `contents`}}
+
+<main class="home">
+
+	<section>
+		<p><a href="ext/hoard.xpi">Download browser extension</a></p>
+	</section>
+
+	<section>
+		<ul>
+			{{ range $docid := .PageData }}
+			<li><a href="documents/view/g{{$docid}}/">g{{$docid}}</a></li>
+			{{ end }}
+		</ul>
+	</section>
+
+</main>
+
+{{end}}

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="nl-NL">
+	<head>
+		<title>Doc-hoarder</title>
+
+		<base href="."></head><body>
+
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+		<meta charset="UTF-8" />
+
+		<meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0" />
+
+		<link rel="stylesheet" href="css/doc-hoarder.css" />
+	</head>
+	<body>
+
+		<nav class="main-nav">
+			<section class="-brand"><a href="{{.AppRoot}}">Doc-hoarder</a></section>
+		</nav>
+
+{{template `contents` .}}
+
+		<footer class="powered-by">
+			<p>Doc-hoarder x.y.z-w-gdeadbeef</p>
+		</footer>
+
+	</body>
+</html>
