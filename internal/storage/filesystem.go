@@ -33,6 +33,9 @@ type jankyFS struct {
 func (jfs jankyFS) DocumentIDs(context.Context) ([]string, error) {
 	d, err := os.Open(jfs.RootDirectory)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	contents, err := d.ReadDir(-1)

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -10,12 +11,14 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"time"
 
 	"github.com/thijzert/doc-hoarder/internal/storage"
 	"github.com/thijzert/doc-hoarder/web/plumbing"
+	"github.com/thijzert/go-rcfile"
 )
 
 var Version string
@@ -31,9 +34,24 @@ func main() {
 		Domain = u.Host
 	}
 
+	docStoreLocation := ""
+
+	cmdline := flag.NewFlagSet("dochoarder", flag.ContinueOnError)
+
+	cmdline.StringVar(&docStoreLocation, "docstore", "", "Type and location for backend document store, e.g. 'fs:/path/to/documents'")
+
+	rcfile.ParseInto(cmdline, "dochoarderrc")
+	err = cmdline.Parse(os.Args[1:])
+	if err == flag.ErrHelp {
+		return
+	} else if err != nil {
+		cmdline.Usage()
+		log.Panic(err)
+	}
+
 	log.Printf("Doc-hoarder version %s", Version)
 
-	docStore, err := storage.GetDocStore("")
+	docStore, err := storage.GetDocStore(docStoreLocation)
 	if err != nil {
 		log.Fatal(err)
 	}
