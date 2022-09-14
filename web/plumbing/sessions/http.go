@@ -2,9 +2,12 @@ package sessions
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
+
+	weberrors "github.com/thijzert/doc-hoarder/web/plumbing/errors"
 )
 
 type sessPool int
@@ -41,8 +44,8 @@ func (sh sessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		log.Printf("error getting session: %s", err)
-		w.WriteHeader(500)
-		w.Write([]byte("session store error"))
+		sh.HTTPError(w, r, err)
+		return
 	}
 
 	lifetime := 12 * time.Hour
@@ -56,7 +59,6 @@ func (sh sessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	}
 	w.Header().Add("Set-Cookie", cookie.String())
-	log.Printf("Set-Cookie: %s", cookie.String())
 
 	cctx := context.WithValue(ctx, sessionKey, &sess)
 	r = r.WithContext(cctx)
@@ -66,6 +68,15 @@ func (sh sessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if sess.Dirty {
 		sess.ID = id
 		sh.store.StoreSession(ctx, sess)
+	}
+}
+
+func (sh sessHandler) HTTPError(w http.ResponseWriter, r *http.Request, err error) {
+	if erh, ok := sh.h.(weberrors.ErrorHandler); ok {
+		erh.HTTPError(w, r, err)
+	} else {
+		w.WriteHeader(500)
+		fmt.Fprintf(w, "session error: %s", err)
 	}
 }
 

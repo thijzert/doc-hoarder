@@ -29,36 +29,22 @@ func AsJSON(h Handler) http.Handler {
 	}
 }
 
+type jsonErr struct {
+	Headline string `json:"error"`
+	Message  string `json:"_"`
+}
+
 type jsonHandler struct {
 	Handler Handler
 }
 
 func (j jsonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	type jsonErr struct {
-		Headline string `json:"error"`
-		Message  string `json:"_"`
-	}
-
 	code := 200
 
 	rv, err := j.Handler.Handle(r)
 	if err != nil {
-		code = 500
-		if sc, ok := err.(HTTPStatuser); ok {
-			code = sc.StatusCode()
-		}
-		if red, ok := err.(httpRedirect); ok {
-			w.Header().Set("Location", red.Location)
-		}
-
-		rrv := jsonErr{"internal server error", "an internal error has occurred"}
-		if um, ok := err.(UserMessager); ok {
-			rrv.Headline, rrv.Message = um.ErrorMessage()
-		}
-
-		rv = rrv
+		j.HTTPError(w, r, err)
+		return
 	}
 
 	if bl, ok := rv.(Blob); ok {
@@ -66,6 +52,27 @@ func (j jsonHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	j.asJson(w, code, rv)
+}
+
+func (j jsonHandler) HTTPError(w http.ResponseWriter, r *http.Request, err error) {
+	code := 500
+	if sc, ok := err.(HTTPStatuser); ok {
+		code = sc.StatusCode()
+	}
+	if red, ok := err.(httpRedirect); ok {
+		w.Header().Set("Location", red.Location)
+	}
+
+	rrv := jsonErr{"internal server error", "an internal error has occurred"}
+	if um, ok := err.(UserMessager); ok {
+		rrv.Headline, rrv.Message = um.ErrorMessage()
+	}
+
+	j.asJson(w, code, rrv)
+}
+
+func (j jsonHandler) asJson(w http.ResponseWriter, code int, rv interface{}) {
 	rvm, err := json.Marshal(rv)
 	if err != nil {
 		code = 500
@@ -122,43 +129,7 @@ func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		code := 500
-		if sc, ok := err.(HTTPStatuser); ok {
-			code = sc.StatusCode()
-		}
-
-		if red, ok := err.(httpRedirect); ok {
-			w.Header().Set("Location", red.Location)
-		}
-
-		npd := struct {
-			Headline string
-			Message  string
-		}{"internal server error", "an internal error has occurred"}
-
-		if um, ok := err.(UserMessager); ok {
-			npd.Headline, npd.Message = um.ErrorMessage()
-		}
-		tpData.PageData = npd
-
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(code)
-
-		tpl, err := getTemplate("page/error")
-
-		var b bytes.Buffer
-		if err == nil {
-			err = tpl.ExecuteTemplate(&b, rootName, tpData)
-			if err == nil {
-				io.Copy(w, &b)
-				return
-			}
-		}
-
-		fmt.Fprintf(w, "<!DOCTYPE html>\n<html><head><base href=\"%s\"></head><body>\n\n", html.EscapeString(tpData.AppRoot))
-		fmt.Fprintf(w, "<h1>%s</h1>", html.EscapeString(npd.Headline))
-		fmt.Fprintf(w, "<p>%s</p>", html.EscapeString(npd.Message))
-		fmt.Fprintf(w, "</body></html>")
+		h.HTTPError(w, r, err)
 		return
 	}
 
@@ -172,18 +143,66 @@ func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var b bytes.Buffer
 	err = tpl.ExecuteTemplate(&b, rootName, tpData)
 	if err != nil {
-		w.WriteHeader(500)
-		fmt.Fprintf(w, "<!DOCTYPE html>\n<html><head><base href=\"%s\"></head><body>\n\n", html.EscapeString(tpData.AppRoot))
-		fmt.Fprintf(w, "<h1>internal server error</h1>")
-		fmt.Fprintf(w, "<p>An error occurred while displaying this page to you.</p>")
-		if IsDevBuild() {
-			fmt.Fprintf(w, "<section>%s</section>", html.EscapeString(err.Error()))
-		}
-		fmt.Fprintf(w, "</body></html>")
+		h.templateHTTPError(w, r, err)
 		return
 	}
 
 	io.Copy(w, &b)
+}
+
+func (h htmlHandler) HTTPError(w http.ResponseWriter, r *http.Request, err error) {
+	tpl, err := getTemplate("page/error")
+	if err != nil {
+		h.templateHTTPError(w, r, err)
+		return
+	}
+
+	tpData := TemplateData{
+		AppRoot:      appRoot(r),
+		TemplateName: "error",
+	}
+
+	code := 500
+	if sc, ok := err.(HTTPStatuser); ok {
+		code = sc.StatusCode()
+	}
+
+	if red, ok := err.(httpRedirect); ok {
+		w.Header().Set("Location", red.Location)
+	}
+
+	npd := struct {
+		Headline string
+		Message  string
+	}{"internal server error", "an internal error has occurred"}
+
+	if um, ok := err.(UserMessager); ok {
+		npd.Headline, npd.Message = um.ErrorMessage()
+	}
+	tpData.PageData = npd
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(code)
+
+	var b bytes.Buffer
+	err = tpl.ExecuteTemplate(&b, "page", tpData)
+	if err != nil {
+		h.templateHTTPError(w, r, err)
+		return
+	}
+
+	io.Copy(w, &b)
+}
+
+func (h htmlHandler) templateHTTPError(w http.ResponseWriter, r *http.Request, err error) {
+	w.WriteHeader(500)
+	fmt.Fprintf(w, "<!DOCTYPE html>\n<html><head><base href=\"%s\"></head><body>\n\n", html.EscapeString(appRoot(r)))
+	fmt.Fprintf(w, "<h1>internal server error</h1>")
+	fmt.Fprintf(w, "<p>An error occurred while displaying this page to you.</p>")
+	if IsDevBuild() {
+		fmt.Fprintf(w, "<section>%s</section>", html.EscapeString(err.Error()))
+	}
+	fmt.Fprintf(w, "</body></html>")
 }
 
 func appRoot(r *http.Request) string {
