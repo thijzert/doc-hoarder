@@ -18,6 +18,7 @@ import (
 
 	"github.com/thijzert/doc-hoarder/internal/storage"
 	"github.com/thijzert/doc-hoarder/web/plumbing"
+	"github.com/thijzert/doc-hoarder/web/plumbing/sessions"
 	"github.com/thijzert/go-rcfile"
 )
 
@@ -35,10 +36,12 @@ func main() {
 	}
 
 	docStoreLocation := ""
+	sessionStoreLocation := ""
 
 	cmdline := flag.NewFlagSet("dochoarder", flag.ContinueOnError)
 
 	cmdline.StringVar(&docStoreLocation, "docstore", "", "Type and location for backend document store, e.g. 'fs:/path/to/documents'")
+	cmdline.StringVar(&sessionStoreLocation, "sessionstore", "", "Type and location for session store, e.g. 'file:/path/to/sessions.json'")
 
 	rcfile.ParseInto(cmdline, "dochoarderrc")
 	err = cmdline.Parse(os.Args[1:])
@@ -56,15 +59,20 @@ func main() {
 		log.Fatal(err)
 	}
 
+	sessStore, err := sessions.GetStore(sessionStoreLocation)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	mux.Handle("/", sessions.WithSession(sessStore, plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		docids, err := docStore.DocumentIDs(r.Context())
 		if err != nil {
 			return nil, err
 		}
 
 		return docids, nil
-	}), "page/home"))
+	}), "page/home")))
 
 	mux.Handle("/assets/js/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		jspath := strings.Replace(r.URL.Path, "./", "-", -1)

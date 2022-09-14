@@ -3,7 +3,7 @@
 	<head>
 		<title>Doc-hoarder</title>
 
-		<base href="."></head><body>
+		<base href="{{.AppRoot}}" />
 
 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 		<meta charset="UTF-8" />
@@ -16,6 +16,7 @@
 
 		<nav class="main-nav">
 			<section class="-brand"><a href="{{.AppRoot}}">Doc-hoarder</a></section>
+			<section>{{.Session.ID}}</section>
 		</nav>
 
 {{template `contents` .}}

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"path"
 	"strings"
+
+	"github.com/thijzert/doc-hoarder/web/plumbing/sessions"
 )
 
 type Handler interface {
@@ -105,14 +107,12 @@ type htmlHandler struct {
 }
 
 func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tpData := struct {
-		AppRoot      string
-		TemplateName string
-		PageData     interface{}
-	}{
+	tpData := TemplateData{
 		AppRoot:      appRoot(r),
 		TemplateName: path.Base(h.TemplateName),
 	}
+
+	tpData.Session = sessions.GetSession(r)
 
 	rootName := strings.SplitN(h.TemplateName, "/", 2)[0]
 
