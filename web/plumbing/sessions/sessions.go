@@ -30,6 +30,7 @@ type Store interface {
 	GetSession(context.Context, SessionID) (Session, error)
 	StoreSession(context.Context, Session) error
 	TouchSession(context.Context, SessionID) error
+	Prune(context.Context) error
 }
 
 var ErrNotPresent = errors.New("session not present")

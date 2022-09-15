@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -63,6 +64,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Clean out old stale sessions from the store
+	go func(ctx context.Context) {
+		tick := time.NewTicker(10 * time.Minute)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				err := sessStore.Prune(ctx)
+				if err != nil {
+					log.Printf("error pruning session store: %v", err)
+				}
+			}
+		}
+	}(ctx)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", sessions.WithSession(sessStore, plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {

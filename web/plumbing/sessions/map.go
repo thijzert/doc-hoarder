@@ -11,9 +11,10 @@ import (
 )
 
 type mapStore struct {
-	Mu       sync.Mutex
-	Contents map[SessionID]Session
-	Filename string
+	MaxDuration time.Duration
+	Mu          sync.Mutex
+	Contents    map[SessionID]Session
+	Filename    string
 }
 
 func (m mapStore) NewSession(ctx context.Context) (Session, error) {
@@ -61,6 +62,9 @@ func (m mapStore) StoreSession(ctx context.Context, sess Session) error {
 func (m mapStore) actuallyStoreSession(ctx context.Context, sess Session) error {
 	m.Contents[sess.ID] = sess
 
+	return m.saveContents(ctx)
+}
+func (m mapStore) saveContents(ctx context.Context) error {
 	if m.Filename == "" {
 		return nil
 	}
@@ -75,6 +79,23 @@ func (m mapStore) actuallyStoreSession(ctx context.Context, sess Session) error 
 	en.SetIndent("", "\t")
 	err = en.Encode(m.Contents)
 	return err
+}
+
+func (m mapStore) Prune(ctx context.Context) error {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+
+	rm := []SessionID{}
+	for id, sess := range m.Contents {
+		if time.Since(sess.LastSeen) > m.MaxDuration {
+			rm = append(rm, id)
+		}
+	}
+	for _, id := range rm {
+		delete(m.Contents, id)
+	}
+
+	return m.saveContents(ctx)
 }
 
 func (m mapStore) TouchSession(ctx context.Context, id SessionID) error {
@@ -93,7 +114,8 @@ func (m mapStore) TouchSession(ctx context.Context, id SessionID) error {
 func init() {
 	newMapStore := func(_descriptor string) (Store, error) {
 		return mapStore{
-			Contents: make(map[SessionID]Session),
+			MaxDuration: 72 * time.Hour,
+			Contents:    make(map[SessionID]Session),
 		}, nil
 	}
 	RegisterStorageMethod("", newMapStore)
@@ -102,8 +124,9 @@ func init() {
 
 	newFSStore := func(fileName string) (Store, error) {
 		rv := mapStore{
-			Contents: make(map[SessionID]Session),
-			Filename: fileName,
+			MaxDuration: 72 * time.Hour,
+			Contents:    make(map[SessionID]Session),
+			Filename:    fileName,
 		}
 
 		f, err := os.Open(fileName)

@@ -53,6 +53,7 @@ func (sh sessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	cookie := http.Cookie{
 		Name:     CookieName,
 		Value:    string(id),
+		Path:     "/",
 		Expires:  time.Now().Add(lifetime),
 		Secure:   true,
 		HttpOnly: true,
@@ -68,6 +69,8 @@ func (sh sessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if sess.Dirty {
 		sess.ID = id
 		sh.store.StoreSession(ctx, sess)
+	} else {
+		sh.store.TouchSession(ctx, id)
 	}
 }
 
