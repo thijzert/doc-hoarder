@@ -4,6 +4,7 @@ import (
 	"html/template"
 	"path"
 
+	"github.com/thijzert/doc-hoarder/web/plumbing/login"
 	"github.com/thijzert/doc-hoarder/web/plumbing/sessions"
 )
 
@@ -12,6 +13,7 @@ type TemplateData struct {
 	TemplateName string
 	PageData     interface{}
 	Session      *sessions.Session
+	User         *login.User
 }
 
 var localTemplates map[string]*template.Template

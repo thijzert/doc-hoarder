@@ -23,6 +23,13 @@ type Session struct {
 	Dirty    bool `json:"-",xml:"-"`
 	Started  time.Time
 	LastSeen time.Time
+
+	LoggedInAs string
+
+	// FIXME: decouple from OpenID / OAuth
+	LoginSession string
+	AccessToken  string
+	RefreshToken string
 }
 
 type Store interface {

@@ -16,7 +16,7 @@
 
 		<nav class="main-nav">
 			<section class="-brand"><a href="{{.AppRoot}}">Doc-hoarder</a></section>
-			<section>{{.Session.ID}}</section>
+			<section>{{if .Session}}{{.Session.ID}}{{end}}</section>
 		</nav>
 
 {{template `contents` .}}

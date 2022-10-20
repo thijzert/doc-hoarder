@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"net/http"
 	"path"
 	"strings"
 
+	"github.com/thijzert/doc-hoarder/web/plumbing/login"
 	"github.com/thijzert/doc-hoarder/web/plumbing/sessions"
 )
 
@@ -117,9 +119,9 @@ func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tpData := TemplateData{
 		AppRoot:      appRoot(r),
 		TemplateName: path.Base(h.TemplateName),
+		Session:      sessions.GetSession(r),
+		User:         login.GetUser(r),
 	}
-
-	tpData.Session = sessions.GetSession(r)
 
 	rootName := strings.SplitN(h.TemplateName, "/", 2)[0]
 
@@ -151,9 +153,9 @@ func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h htmlHandler) HTTPError(w http.ResponseWriter, r *http.Request, err error) {
-	tpl, err := getTemplate("page/error")
-	if err != nil {
-		h.templateHTTPError(w, r, err)
+	tpl, tperr := getTemplate("page/error")
+	if tperr != nil {
+		h.templateHTTPError(w, r, tperr)
 		return
 	}
 
@@ -178,11 +180,14 @@ func (h htmlHandler) HTTPError(w http.ResponseWriter, r *http.Request, err error
 
 	if um, ok := err.(UserMessager); ok {
 		npd.Headline, npd.Message = um.ErrorMessage()
+		log.Printf("%+v", npd)
+	} else {
+		log.Printf("other error %T %v", err, err)
 	}
+
 	tpData.PageData = npd
 
 	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(code)
 
 	var b bytes.Buffer
 	err = tpl.ExecuteTemplate(&b, "page", tpData)
@@ -191,6 +196,7 @@ func (h htmlHandler) HTTPError(w http.ResponseWriter, r *http.Request, err error
 		return
 	}
 
+	w.WriteHeader(code)
 	io.Copy(w, &b)
 }
 

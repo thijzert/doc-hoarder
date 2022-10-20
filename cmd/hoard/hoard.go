@@ -19,6 +19,7 @@ import (
 
 	"github.com/thijzert/doc-hoarder/internal/storage"
 	"github.com/thijzert/doc-hoarder/web/plumbing"
+	"github.com/thijzert/doc-hoarder/web/plumbing/login"
 	"github.com/thijzert/doc-hoarder/web/plumbing/sessions"
 	"github.com/thijzert/go-rcfile"
 )
@@ -38,11 +39,13 @@ func main() {
 
 	docStoreLocation := ""
 	sessionStoreLocation := ""
+	loginProviderID := ""
 
 	cmdline := flag.NewFlagSet("dochoarder", flag.ContinueOnError)
 
 	cmdline.StringVar(&docStoreLocation, "docstore", "", "Type and location for backend document store, e.g. 'fs:/path/to/documents'")
 	cmdline.StringVar(&sessionStoreLocation, "sessionstore", "", "Type and location for session store, e.g. 'file:/path/to/sessions.json'")
+	cmdline.StringVar(&loginProviderID, "login", "", "Type and URL for login provider, e.g. 'oidc:https://CLIENT_ID:CLIENT_SECRET@login.example.org/auth/realms/example'")
 
 	rcfile.ParseInto(cmdline, "dochoarderrc")
 	err = cmdline.Parse(os.Args[1:])
@@ -85,8 +88,19 @@ func main() {
 		}
 	}(ctx)
 
+	lg, err := login.OIDCFromURL(ctx, loginProviderID[5:], BaseURL, "/auth/callback")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	mustLogin := func(h http.Handler) http.Handler {
+		h = lg.Must(h)
+		h = sessions.WithSession(sessStore, h)
+		return h
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/", sessions.WithSession(sessStore, plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	mux.Handle("/", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		docids, err := docStore.DocumentIDs(r.Context())
 		if err != nil {
 			return nil, err
@@ -94,6 +108,7 @@ func main() {
 
 		return docids, nil
 	}), "page/home")))
+	mux.Handle("/auth/callback", sessions.WithSession(sessStore, lg.Callback()))
 
 	mux.Handle("/assets/js/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		jspath := strings.Replace(r.URL.Path, "./", "-", -1)
