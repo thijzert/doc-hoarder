@@ -8,13 +8,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc"
+	"github.com/pkg/errors"
 	weberrors "github.com/thijzert/doc-hoarder/web/plumbing/errors"
 	"github.com/thijzert/doc-hoarder/web/plumbing/sessions"
 	"golang.org/x/oauth2"
@@ -45,16 +45,16 @@ type OIDC struct {
 	verifier     *oidc.IDTokenVerifier
 }
 
-func OIDCFromURL(ctx context.Context, loginProvider, thisApplication, callbackURL string) (OIDC, error) {
+func OIDCFromURL(ctx context.Context, loginProvider string, userStore Store, thisApplication, callbackURL string) (OIDC, error) {
 	var rv OIDC
+	rv.store = userStore
 
 	rv.cookieKey = make([]byte, 32)
 	rand.Read(rv.cookieKey)
 
 	ru, err := url.Parse(loginProvider)
 	if err != nil {
-		log.Printf("error parsing oidc url: %v", err)
-		return rv, err
+		return rv, errors.Wrap(err, "error parsing oidc url")
 	}
 	if ru.User != nil {
 		rv.ClientID = ru.User.Username()
@@ -65,18 +65,15 @@ func OIDCFromURL(ctx context.Context, loginProvider, thisApplication, callbackUR
 
 	approot, err := url.Parse(thisApplication)
 	if err != nil {
-		log.Printf("error parsing approot url: %v", err)
-		return rv, err
+		return rv, errors.Wrap(err, "error parsing approot url")
 	}
 	rv.AppRoot = strings.TrimRight(approot.Path, "/")
 
 	rv.ReturnURL = thisApplication + callbackURL
-	rv.store = TODOREMOVELATER
 
 	rv.provider, err = oidc.NewProvider(ctx, rv.URL)
 	if err != nil {
-		log.Printf("oidc url: %s", rv.URL)
-		return rv, err
+		return rv, errors.Wrap(err, "error setting up oidc provider")
 	}
 
 	// Configure an OpenID Connect aware OAuth2 client.
@@ -137,7 +134,6 @@ type oidcHandler struct {
 }
 
 func (o oidcHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Printf("request: %v", r)
 	ctx := r.Context()
 
 	sess := sessions.GetSession(r)
@@ -173,9 +169,6 @@ func (o oidcHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			http.Redirect(w, r, o.oidc.oauth2Config.AuthCodeURL(state), 302)
 			return
-
-			log.Print(ErrLoginRequired)
-			o.HTTPError(w, r, ErrLoginRequired)
 		} else {
 			o.h.ServeHTTP(w, r)
 		}
@@ -190,7 +183,7 @@ func (o oidcHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err = o.oidc.store.StoreUser(ctx, user)
 	}
 	if err != nil {
-		log.Printf("error getting user id '%s': %s", id, err)
+		// error getting user id
 		o.HTTPError(w, r, err)
 		return
 	}
@@ -218,7 +211,6 @@ func (o OIDC) Callback() http.Handler {
 			sess = &sessions.Session{}
 		}
 
-		log.Printf("callback: %v", r)
 		ctx := r.Context()
 
 		state := r.URL.Query().Get("state")

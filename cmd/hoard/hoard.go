@@ -39,12 +39,14 @@ func main() {
 
 	docStoreLocation := ""
 	sessionStoreLocation := ""
+	userStoreLocation := ""
 	loginProviderID := ""
 
 	cmdline := flag.NewFlagSet("dochoarder", flag.ContinueOnError)
 
 	cmdline.StringVar(&docStoreLocation, "docstore", "", "Type and location for backend document store, e.g. 'fs:/path/to/documents'")
 	cmdline.StringVar(&sessionStoreLocation, "sessionstore", "", "Type and location for session store, e.g. 'file:/path/to/sessions.json'")
+	cmdline.StringVar(&userStoreLocation, "userprofilestore", "", "Type and location for user profile store, e.g. 'file:/path/to/userprofile.json'")
 	cmdline.StringVar(&loginProviderID, "login", "", "Type and URL for login provider, e.g. 'oidc:https://CLIENT_ID:CLIENT_SECRET@login.example.org/auth/realms/example'")
 
 	rcfile.ParseInto(cmdline, "dochoarderrc")
@@ -63,6 +65,10 @@ func main() {
 		log.Fatal(err)
 	}
 
+	userStore, err := login.GetUserStore(userStoreLocation)
+	if err != nil {
+		log.Fatal(err)
+	}
 	sessStore, err := sessions.GetStore(sessionStoreLocation)
 	if err != nil {
 		log.Fatal(err)
@@ -88,7 +94,7 @@ func main() {
 		}
 	}(ctx)
 
-	lg, err := login.OIDCFromURL(ctx, loginProviderID[5:], BaseURL, "/auth/callback")
+	lg, err := login.OIDCFromURL(ctx, loginProviderID[5:], userStore, BaseURL, "/auth/callback")
 	if err != nil {
 		log.Fatal(err)
 	}
