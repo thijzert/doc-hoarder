@@ -100,7 +100,11 @@ type Blob struct {
 }
 
 func (bl Blob) WriteTo(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", bl.ContentType)
+	if bl.ContentType != "" {
+		w.Header().Set("Content-Type", bl.ContentType)
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(bl.Contents)))
 	if bl.Header != nil {
 		for k, vs := range bl.Header {

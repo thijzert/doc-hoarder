@@ -4,3 +4,4 @@ cmd/hoard/hoard.exe
 web/assets/extensions/*.xpi
 web/assets/extensions/_signed/*.xpi
 /web/plumbing/assets.go
+web/assets/css

@@ -132,6 +132,26 @@ func main() {
 			Contents:    js,
 		}, nil
 	}), "page/asset"))
+	mux.Handle("/assets/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		asspath := strings.Replace(r.URL.Path, "./", "-", -1)
+		if len(asspath) < 12 {
+			return nil, plumbing.ErrNotFound
+		}
+
+		js, err := plumbing.GetAsset(asspath[8:])
+		if err != nil {
+			return nil, plumbing.ErrNotFound
+		}
+		rv := plumbing.Blob{
+			Contents: js,
+		}
+
+		if a := strings.LastIndex(asspath, "."); a >= 0 {
+			rv.ContentType = mime.TypeByExtension(asspath[a:])
+		}
+
+		return rv, nil
+	}), "page/asset"))
 
 	mux.Handle("/ext/updates.json", plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		type versionInfo struct {

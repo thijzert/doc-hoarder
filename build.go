@@ -77,7 +77,7 @@ func main() {
 	if conf.Development && conf.Quick {
 		log.Printf("")
 		log.Printf("You requested a quick build. This will assume")
-		log.Printf(" you have a version of  `gulp watch`  running")
+		log.Printf(" you have a version of  `sassc`  running")
 		log.Printf(" in a separate process.")
 		log.Printf("")
 	}
@@ -120,6 +120,40 @@ func compile(ctx context.Context, conf compileConfig) error {
 	gitDescribe, err := gitDescCmd.Output()
 	if err == nil && len(gitDescribe) > 0 {
 		conf.Version = strings.TrimLeft(strings.TrimSpace(string(gitDescribe)), "v")
+	}
+
+	if !conf.Quick {
+		inDir, outDir := "web/assets/scss", "web/assets/css"
+		f, err := os.Open(inDir)
+		if err != nil {
+			return errors.Errorf("cannot list stylesheets: %v", err)
+		}
+		fis, err := f.ReadDir(-1)
+		if err != nil {
+			return errors.Errorf("cannot list stylesheets: %v", err)
+		}
+
+		for _, fi := range fis {
+			name := fi.Name()
+			if fi.IsDir() || len(name) < 6 || name[:1] == "." || name[:1] == "_" || name[len(name)-5:] != ".scss" {
+				continue
+			}
+
+			style, sourcemap := "compressed", "-m"
+			if conf.Development {
+				style, sourcemap = "nested", "-M"
+			}
+
+			inFile := path.Join(inDir, name)
+			outFile := path.Join(outDir, name[:len(name)-5]+".css")
+			sassCmd := exec.CommandContext(ctx, "sassc", "--style", style, sourcemap, inFile, outFile)
+			sassCmd.Env = append(sassCmd.Env, os.Environ()...)
+
+			err = passthruCmd(sassCmd)
+			if err != nil {
+				return errors.WithMessage(err, "compilation failed")
+			}
+		}
 	}
 
 	// Build browser extensions

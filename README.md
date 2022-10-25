@@ -35,6 +35,10 @@ Extensions will be built in an unpacked state in `build/extensions/*`. Use `web-
 In order to run the browser extension, it will need to be signed by Mozilla. [Follow the instructions for self-distribution.](https://extensionworkshop.com/documentation/publish/submitting-an-add-on/#self-distribution)
 The XPI files you'll need to upload to Mozilla can be found in the directory `web/assets/extensions`. After getting approved, place the signed version in `web/assets/extensions/_signed`, and re-run the build script.
 
+Acknowledgements
+----------------
+* This project includes [normalize.css](https://github.com/necolas/normalize.css) by Nicolas Gallagher, licensed under the MIT license.
+
 Image credits
 -------------
 * [Orangutan icons created by Flat Icons - Flaticon](https://www.flaticon.com/free-icons/orangutan)
