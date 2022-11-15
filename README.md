@@ -38,6 +38,7 @@ The XPI files you'll need to upload to Mozilla can be found in the directory `we
 Acknowledgements
 ----------------
 * This project includes [normalize.css](https://github.com/necolas/normalize.css) by Nicolas Gallagher, licensed under the MIT license.
+* This project includes the [Nord Theme](https://github.com/arcticicestudio/nord/raw/develop/src/nord.scss) by Arctic Ice Studio
 
 Image credits
 -------------

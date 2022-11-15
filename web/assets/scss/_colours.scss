@@ -1,13 +1,99 @@
 
-$palette-a: #d4f1f4;
-$palette-b: #68bbe3;
-$palette-c: #0e86d4;
-$palette-d: #055c9d;
-$palette-e: #003060;
+@import "nord";
 
-$text-palette-a: $palette-e;
-$text-palette-b: $palette-e;
-$text-palette-c: #fff;
-$text-palette-d: #fff;
-$text-palette-e: $palette-a;
+$colours_light: (
+	//nord0: $nord0,   nord1: $nord1,   nord2: $nord2,   nord3: $nord3,
+	//nord4: $nord4,   nord5: $nord5,   nord6: $nord6,   nord7: $nord7,
+	//nord8: $nord8,   nord9: $nord9,   nord10: $nord10, nord11: $nord11,
+	//nord12: $nord12, nord13: $nord13, nord14: $nord14, nord15: $nord15,
+
+	main-text: $nord0,
+	main-back: $nord4,
+	link-text: $nord9,
+	link-text-act: $nord7,
+
+	navbar: $nord5,
+);
+$colours_dark: (
+	//nord0: $nord0,   nord1: $nord1,   nord2: $nord2,   nord3: $nord3,
+	//nord4: $nord4,   nord5: $nord5,   nord6: $nord6,   nord7: $nord7,
+	//nord8: $nord8,   nord9: $nord9,   nord10: $nord10, nord11: $nord11,
+	//nord12: $nord12, nord13: $nord13, nord14: $nord14, nord15: $nord15,
+
+	main-text: $nord4,
+	main-back: $nord0,
+	link-text: $nord9,
+	link-text-act: $nord7,
+
+	navbar: $nord1,
+);
+
+
+@mixin col($prop, $name) {
+	#{$prop}: var(#{"--"}#{$name}, map-get($colours_light, $name));
+}
+@mixin tcol($name) {
+	@include col(color, $name);
+}
+@mixin bgcol($name) {
+	@include col(background-color, $name);
+}
+@mixin brdcol($name) {
+	@include col(border-color, $name);
+}
+
+
+body {
+	@include tcol(main-text);
+	@include bgcol(main-back);
+
+	a {
+		&, &:visited, &:active {
+			@include tcol(link-text);
+		}
+		&:hover {
+			@include tcol(link-text-act);
+		}
+	}
+}
+
+nav.main-nav {
+	@include bgcol(navbar);
+}
+
+
+
+
+
+
+@mixin light-theme() {
+	color-scheme: light;
+	@each $name, $col in $colours_light {
+		#{"--"}#{$name}: $col;
+	}
+}
+@mixin dark-theme() {
+	color-scheme: dark;
+	@each $name, $col in $colours_dark {
+		#{"--"}#{$name}: $col;
+	}
+}
+
+html.light {
+	@include light-theme();
+}
+html.dark {
+	@include dark-theme();
+}
+
+@media (#{"not (prefers-color-scheme: dark)"}) {
+	html:not(.dark) {
+		@include light-theme();
+	}
+}
+@media (prefers-color-scheme: dark) {
+	html:not(.light) {
+		@include dark-theme();
+	}
+}
 

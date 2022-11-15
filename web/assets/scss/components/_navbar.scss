@@ -1,0 +1,15 @@
+
+nav.main-nav {
+	height: 2.5rem;
+	display: flex;
+	justify-content: space-between;
+
+	section.-brand {
+		a {
+			&,&:visited,&:hover {
+				@include tcol(main-text);
+				text-decoration: none;
+			}
+		}
+	}
+}

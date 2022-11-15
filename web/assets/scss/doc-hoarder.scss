@@ -3,8 +3,8 @@
 @import "typography";
 @import "normalize";
 
+@import "components/navbar";
+
 body {
-	background-color: $palette-a;
-	color: $text-palette-a;
 }
 
