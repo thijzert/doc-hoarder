@@ -1,0 +1,89 @@
+{{define `contents`}}
+
+<main class="home">
+
+	<section>
+		<h1>UI showcase</h1>
+	</section>
+	<section>
+		<button id="btn-toggle-theme"></button>
+	</section>
+	<section>
+		<h2>Buttons</h2>
+		<div class="btn-row">
+			<button class="-large ">Large</button>
+			<button class="-large -accent">-accent</button>
+			<button class="-large " disabled>-disabled</button>
+			<button class="-large -transparent">-transparent</button>
+			<button class="-large -transparent -accent">-transparent -accent</button>
+			<button class="-large -transparent" disabled>-transparent disabled</button>
+		</div>
+		<div class="btn-row">
+			<button class="">Normal</button>
+			<button class="-accent">-accent</button>
+			<button class="" disabled>-disabled</button>
+			<button class="-transparent">-transparent</button>
+			<button class="-transparent -accent">-transparent -accent</button>
+			<button class="-transparent" disabled>-transparent disabled</button>
+		</div>
+		<div class="btn-row">
+			<button class="-small ">Small</button>
+			<button class="-small -accent">-accent</button>
+			<button class="-small " disabled>-disabled</button>
+			<button class="-small -transparent">-transparent</button>
+			<button class="-small -transparent -accent">-transparent -accent</button>
+			<button class="-small -transparent" disabled>-transparent disabled</button>
+		</div>
+	</section>
+	<section>
+		<h2>Palette</h2>
+		<div class="palette">
+			<h3>Polar night</h3>
+			<aside class="-colours">
+				<div class="-nord0"><h4>0</h4></div>
+				<div class="-nord1"><h4>1</h4></div>
+				<div class="-nord2"><h4>2</h4></div>
+				<div class="-nord3"><h4>3</h4></div>
+			</aside>
+		</div>
+		<div class="palette">
+			<h3>Snowstorm</h3>
+			<aside class="-colours">
+				<div class="-nord4"><h4>4</h4></div>
+				<div class="-nord5"><h4>5</h4></div>
+				<div class="-nord6"><h4>6</h4></div>
+			</aside>
+		</div>
+		<div class="palette">
+			<h3>Frost</h3>
+			<aside class="-colours">
+				<div class="-nord7"><h4>7</h4></div>
+				<div class="-nord8"><h4>8</h4></div>
+				<div class="-nord9"><h4>9</h4></div>
+				<div class="-nord10"><h4>0</h4></div>
+			</aside>
+		</div>
+		<div class="palette">
+			<h3>Aurora</h3>
+			<aside class="-colours">
+				<div class="-nord11"><h4>11</h4></div>
+				<div class="-nord12"><h4>12</h4></div>
+				<div class="-nord13"><h4>13</h4></div>
+				<div class="-nord14"><h4>14</h4></div>
+				<div class="-nord15"><h4>15</h4></div>
+			</aside>
+		</div>
+	</section>
+
+	<section>
+		<ul>
+			{{ range $docid := .PageData }}
+			<li><a href="documents/view/g{{$docid}}/">g{{$docid}}</a></li>
+			{{ end }}
+		</ul>
+	</section>
+
+</main>
+
+<script type="module" src="assets/js/pages/ui-showcase.js"></script>
+{{end}}

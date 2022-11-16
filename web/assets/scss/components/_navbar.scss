@@ -1,15 +1,45 @@
 
 nav.main-nav {
-	height: 2.5rem;
+	height: 3rem;
 	display: flex;
 	justify-content: space-between;
 
+	padding: 0 1.25rem;
+
 	section.-brand {
 		a {
+			display: block;
+			margin: .5rem 0;
+			height: 2rem;
+			font-size: 1.125rem;
+			line-height: 2rem;
+
+			background-image: url(../img/librarian.png);
+			background-size: 2rem 2rem;
+			background-position: left center;
+			background-repeat: no-repeat;
+			padding-left: 2.5rem;
+
 			&,&:visited,&:hover {
 				@include tcol(main-text);
 				text-decoration: none;
 			}
 		}
 	}
+}
+
+footer.powered-by {
+	font-size: .75rem;
+	text-align: center;
+}
+
+dialog#profile-menu {
+	$brd: .125rem;
+	margin-top: 2.5rem + $brd;
+	margin-right: $gutter;
+
+	border-style: solid;
+	border-width: $brd;
+	@include brdcol(panel-border);
+	@include bgcol(panel-back);
 }

@@ -1,0 +1,40 @@
+
+.btn-row {
+	display: flex;
+	margin-bottom: 2rem;
+}
+
+.palette {
+	aside.-colours {
+		border-radius: .75rem;
+		display: flex;
+		width: max-content;
+
+		> div {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			justify-items: center;
+
+			width: 10rem;
+			height: 6rem;
+
+			&.-nord0  { background-color: $nord0;  color: $nord4; }
+			&.-nord1  { background-color: $nord1;  color: $nord4; }
+			&.-nord2  { background-color: $nord2;  color: $nord4; }
+			&.-nord3  { background-color: $nord3;  color: $nord4; }
+			&.-nord4  { background-color: $nord4;  color: $nord0; }
+			&.-nord5  { background-color: $nord5;  color: $nord0; }
+			&.-nord6  { background-color: $nord6;  color: $nord0; }
+			&.-nord7  { background-color: $nord7;  color: $nord0; }
+			&.-nord8  { background-color: $nord8;  color: $nord0; }
+			&.-nord9  { background-color: $nord9;  color: $nord0; }
+			&.-nord10 { background-color: $nord10; color: $nord0; }
+			&.-nord11 { background-color: $nord11; color: $nord0; }
+			&.-nord12 { background-color: $nord12; color: $nord0; }
+			&.-nord13 { background-color: $nord13; color: $nord0; }
+			&.-nord14 { background-color: $nord14; color: $nord0; }
+			&.-nord15 { background-color: $nord15; color: $nord0; }
+		}
+	}
+}

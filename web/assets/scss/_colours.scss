@@ -8,9 +8,23 @@ $colours_light: (
 	//nord12: $nord12, nord13: $nord13, nord14: $nord14, nord15: $nord15,
 
 	main-text: $nord0,
-	main-back: $nord4,
+	main-back: $nord6,
 	link-text: $nord9,
 	link-text-act: $nord7,
+
+	panel-back: $nord6,
+	panel-border: $nord2,
+
+	ui-text: $nord0,
+	ui-text-act: $nord1,
+	ui-back: $nord8,
+	ui-back-act: $nord9,
+	ui-accent-text: $nord0,
+	ui-accent-back: $nord10,
+	ui-accent-back-act: $nord9,
+	ui-disabled-text: $nord3,
+	ui-disabled-back: $nord4,
+	ui-disabled-back-act: $nord4,
 
 	navbar: $nord5,
 );
@@ -24,6 +38,20 @@ $colours_dark: (
 	main-back: $nord0,
 	link-text: $nord9,
 	link-text-act: $nord7,
+
+	panel-back: $nord1,
+	panel-border: $nord2,
+
+	ui-text: $nord0,
+	ui-text-act: $nord1,
+	ui-back: $nord8,
+	ui-back-act: $nord9,
+	ui-accent-text: $nord0,
+	ui-accent-back: $nord10,
+	ui-accent-back-act: $nord9,
+	ui-disabled-text: $nord0,
+	ui-disabled-back: $nord3,
+	ui-disabled-back-act: $nord3,
 
 	navbar: $nord1,
 );

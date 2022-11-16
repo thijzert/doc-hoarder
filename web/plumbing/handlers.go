@@ -216,8 +216,12 @@ func (h htmlHandler) templateHTTPError(w http.ResponseWriter, r *http.Request, e
 }
 
 func appRoot(r *http.Request) string {
-	// TODO
-	return "."
+	cnt := strings.Count(r.URL.Path, "/") - 1
+	if cnt <= 0 {
+		return "."
+	}
+	rv := strings.Repeat("../", cnt)
+	return rv[:len(rv)-1]
 }
 
 type Headerer interface {

@@ -116,6 +116,9 @@ func main() {
 	}), "page/home")))
 	mux.Handle("/auth/callback", sessions.WithSession(sessStore, lg.Callback()))
 
+	mux.Handle("/assets/ui-showcase", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		return nil, nil
+	}), "page/ui"))
 	mux.Handle("/assets/js/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		jspath := strings.Replace(r.URL.Path, "./", "-", -1)
 		if len(jspath) < 12 {

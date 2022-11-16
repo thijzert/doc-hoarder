@@ -1,10 +1,33 @@
 
+@import "normalize";
 @import "colours";
 @import "typography";
-@import "normalize";
 
+@import "mixins/responsive";
+
+@import "components/buttons";
 @import "components/navbar";
 
-body {
+@import "pages/ui";
+
+
+
+@media screen and (min-width: $cutoff-desktop) {
+	main {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+
+		> section {
+			width: $cutoff-desktop - 2*$gutter;
+		}
+	}
+}
+@media screen and (max-width: $cutoff-desktop - $epsilon) {
+	main {
+		> section {
+			margin: $gutter;
+		}
+	}
 }
 

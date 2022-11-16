@@ -14,9 +14,16 @@
 	</head>
 	<body>
 
+		<dialog id="profile-menu">
+			<ul class="link-panel">
+				<li>{{if .User}}{{.User.FullName}}{{else}}Not logged in{{end}}</li>
+				{{if .User}}<li><a href="user/profile">View profile</a></li>{{end}}
+				{{if .User}}<li><a href="logout">Log out</a></li>{{end}}
+			</ul>
+		</dialog>
 		<nav class="main-nav">
-			<section class="-brand"><a href="{{.AppRoot}}">Doc-hoarder</a></section>
-			<section>{{if .User}}{{.User.GivenName}}{{end}}</section>
+			<section class="-brand"><a href=".">Doc-hoarder</a></section>
+			<section id="nav-smoel">{{if .User}}{{.User.GivenName}}{{end}}</section>
 		</nav>
 
 {{template `contents` .}}
@@ -25,5 +32,6 @@
 			<p>Doc-hoarder x.y.z-w-gdeadbeef</p>
 		</footer>
 
+		<script type="module" src="assets/js/navbar.js"></script>
 	</body>
 </html>
