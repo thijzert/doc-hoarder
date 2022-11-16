@@ -106,14 +106,14 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	mux.Handle("/", plumbing.LandingPageOnly(mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		docids, err := docStore.DocumentIDs(r.Context())
 		if err != nil {
 			return nil, err
 		}
 
 		return docids, nil
-	}), "page/home")))
+	}), "page/home"))))
 	mux.Handle("/auth/callback", sessions.WithSession(sessStore, lg.Callback()))
 
 	mux.Handle("/assets/ui-showcase", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
