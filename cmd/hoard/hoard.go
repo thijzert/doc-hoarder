@@ -20,6 +20,7 @@ import (
 
 	"github.com/thijzert/doc-hoarder/internal/storage"
 	"github.com/thijzert/doc-hoarder/web/plumbing"
+	weberrors "github.com/thijzert/doc-hoarder/web/plumbing/errors"
 	"github.com/thijzert/doc-hoarder/web/plumbing/login"
 	"github.com/thijzert/doc-hoarder/web/plumbing/sessions"
 	"github.com/thijzert/go-rcfile"
@@ -231,6 +232,11 @@ func main() {
 		user := login.GetUser(r)
 		if user == nil {
 			return nil, errors.New("nil user")
+		}
+
+		scope := r.FormValue("scope")
+		if scope == "" {
+			return nil, weberrors.BadRequest("invalid scope")
 		}
 
 		secret, err := userStore.NewAPIKeyForUser(r.Context(), user.ID, r.FormValue("label"))

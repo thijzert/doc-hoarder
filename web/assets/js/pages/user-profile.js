@@ -4,19 +4,29 @@
 	const newKeyDialog = document.getElementById("dlg-new-api-key");
 
 	newKeyButton.addEventListener("click", async () => {
+		let scope = `document.create`;
 		let label = `API key created at ${(new Date).toLocaleString()}`;
 
-		let form = new FormData();
-		form.set("label", label);
-		let rq = await fetch("api/user/new-api-key", {
-			method: "POST",
-			body: form,
-		});
-		let data = await rq.json();
-		console.log(data);
+		try {
+			let form = new FormData();
+			form.set("scope", scope);
+			form.set("label", label);
+			let rq = await fetch("api/user/new-api-key", {
+				method: "POST",
+				body: form,
+			});
+			if ( !rq.ok ) {
+				throw rq;
+			}
 
-		newKeyDialog.querySelector("code.-apikey").textContent = data.apikey;
-		newKeyDialog.showModal();
+			let data = await rq.json();
+			console.log(data);
+
+			newKeyDialog.querySelector("code.-apikey").textContent = data.apikey;
+			newKeyDialog.showModal();
+		} catch ( e ) {
+			console.error(e);
+		}
 	});
 
 	newKeyDialog.querySelector("button.-close").addEventListener("click", () => {
