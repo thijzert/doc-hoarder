@@ -70,20 +70,25 @@ func (m mapStore) GetAPIKey(ctx context.Context, id KeyID) (APIKey, error) {
 
 	return rv, nil
 }
-func (m mapStore) GetUserByAPIKey(ctx context.Context, apikey string) (User, error) {
+func (m mapStore) GetUserByAPIKey(ctx context.Context, apikey string) (User, APIKey, error) {
 	id, _, found := strings.Cut(apikey, ":")
 	if !found {
-		return User{}, ErrNotPresent
+		return User{}, APIKey{}, ErrNotPresent
 	}
 	key, err := m.GetAPIKey(ctx, KeyID(id))
 	if err != nil {
-		return User{}, err
+		return User{}, APIKey{}, err
 	}
 	if !key.Check(apikey) {
-		return User{}, ErrNotPresent
+		return User{}, APIKey{}, ErrNotPresent
 	}
 
-	return m.GetUser(ctx, key.User)
+	rv, err := m.GetUser(ctx, key.User)
+	if err != nil {
+		return User{}, APIKey{}, err
+	}
+
+	return rv, key, nil
 }
 
 func (m mapStore) GetAPIKeysForUser(ctx context.Context, userID UserID) ([]APIKey, error) {

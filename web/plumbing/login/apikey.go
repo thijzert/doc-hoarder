@@ -67,9 +67,18 @@ func newAPIKey() (APIKey, string) {
 	return rv, apikey
 }
 
+type errScopeMismatch struct{}
+
+func (errScopeMismatch) Error() string   { return "the provided API key is not valid for this action" }
+func (errScopeMismatch) StatusCode() int { return 401 }
+func (errScopeMismatch) ErrorMessage() (string, string) {
+	return "scope mismatch", "the provided API key is not valid for this action"
+}
+
 type keyMuster struct {
 	store Store
 	h     http.Handler
+	scope string
 }
 
 func (k keyMuster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -80,13 +89,19 @@ func (k keyMuster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	user, err := k.store.GetUserByAPIKey(ctx, key)
+	user, apikey, err := k.store.GetUserByAPIKey(ctx, key)
 	if err != nil {
 		if err == ErrNotPresent {
 			err = weberrors.ErrUnauthorised
 		}
 		k.HTTPError(w, r, err)
 		return
+	}
+
+	if k.scope != "" {
+		if apikey.Scope != k.scope {
+			k.HTTPError(w, r, errScopeMismatch{})
+		}
 	}
 
 	// Store the user data in the request, and pass it to the next handler
@@ -105,11 +120,12 @@ func (k keyMuster) HTTPError(w http.ResponseWriter, r *http.Request, err error) 
 	}
 }
 
-func MustHaveAPIKey(m Store) func(http.Handler) http.Handler {
-	return func(h http.Handler) http.Handler {
+func MustHaveAPIKey(m Store) func(http.Handler, string) http.Handler {
+	return func(h http.Handler, scope string) http.Handler {
 		return keyMuster{
 			store: m,
 			h:     h,
+			scope: scope,
 		}
 	}
 }

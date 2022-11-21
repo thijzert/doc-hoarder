@@ -36,7 +36,7 @@ type Store interface {
 	GetUser(context.Context, UserID) (User, error)
 	StoreUser(context.Context, User) error
 	GetAPIKey(ctx context.Context, id KeyID) (APIKey, error)
-	GetUserByAPIKey(ctx context.Context, apikey string) (User, error)
+	GetUserByAPIKey(ctx context.Context, apikey string) (User, APIKey, error)
 	GetAPIKeysForUser(ctx context.Context, userID UserID) ([]APIKey, error)
 	NewAPIKeyForUser(ctx context.Context, userID UserID, label string) (string, error)
 	DisableAPIKey(ctx context.Context, userID UserID, id KeyID) error

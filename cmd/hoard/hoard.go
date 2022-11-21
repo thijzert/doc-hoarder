@@ -263,7 +263,7 @@ func main() {
 		return struct {
 			Hello string `json:"hello"`
 		}{user.GivenName}, nil
-	})))))
+	})), "")))
 
 	mux.Handle("/api/new-doc", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		key := r.FormValue("api_key")
