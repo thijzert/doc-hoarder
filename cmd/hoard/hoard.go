@@ -106,7 +106,10 @@ func main() {
 		return h
 	}
 
-	mustKey := login.MustHaveAPIKey(userStore)
+	shouldKey := login.MustHaveAPIKey(userStore)
+	mustKey := func(h http.Handler, scope string) http.Handler {
+		return plumbing.CORS(shouldKey(h, scope))
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/", plumbing.LandingPageOnly(mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
@@ -255,7 +258,7 @@ func main() {
 		}{"ok"}, nil
 	}))))
 
-	mux.Handle("/api/user/whoami", plumbing.CORS(mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	mux.Handle("/api/user/whoami", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		user := login.GetUser(r)
 		if user == nil {
 			return nil, errors.New("nil user")
@@ -263,15 +266,9 @@ func main() {
 		return struct {
 			Hello string `json:"hello"`
 		}{user.GivenName}, nil
-	})), "")))
+	})), ""))
 
-	mux.Handle("/api/new-doc", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		key := r.FormValue("api_key")
-		if len(key) < 32 {
-			return nil, plumbing.ErrUnauthorised
-		}
-		// TODO: check API key
-
+	mux.Handle("/api/new-doc", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		docid, err := docStore.NewDocumentID(r.Context())
 		if err != nil {
 			return nil, err
@@ -283,14 +280,13 @@ func main() {
 			ID: docid,
 		}
 		return res, nil
-	}))))
+	})), "document.create"))
 
 	draftAPI := func(r *http.Request) (storage.DocTransaction, error) {
-		key := r.FormValue("api_key")
-		if len(key) < 32 {
-			return nil, plumbing.ErrUnauthorised
+		user := login.GetUser(r)
+		if user == nil {
+			return nil, errors.New("nil user")
 		}
-		// TODO: check API key
 
 		draft_id := strings.ToLower(r.FormValue("doc_id"))
 		_, err := hex.DecodeString(draft_id)
@@ -306,7 +302,7 @@ func main() {
 
 		return trns, nil
 	}
-	mux.Handle("/api/new-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	mux.Handle("/api/new-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
 			return nil, err
@@ -331,9 +327,9 @@ func main() {
 			Filename: "att/" + attName,
 		}
 		return res, nil
-	}))))
+	})), "document.create"))
 
-	mux.Handle("/api/upload-draft", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	mux.Handle("/api/upload-draft", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
 			return nil, err
@@ -361,8 +357,8 @@ func main() {
 			Message: "Chunk uploaded successfully",
 		}
 		return res, nil
-	}))))
-	mux.Handle("/api/upload-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	})), "document.create"))
+	mux.Handle("/api/upload-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
 			return nil, err
@@ -412,8 +408,8 @@ func main() {
 			Message: "Chunk uploaded successfully",
 		}
 		return res, nil
-	}))))
-	mux.Handle("/api/download-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	})), "document.create"))
+	mux.Handle("/api/download-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
 			return nil, err
@@ -443,8 +439,8 @@ func main() {
 			rv.ContentType = t
 		}
 		return rv, nil
-	}))))
-	mux.Handle("/api/proxy-attachment", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	})), "document.create"))
+	mux.Handle("/api/proxy-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
 			return nil, err
@@ -504,7 +500,7 @@ func main() {
 			Filename: "att/" + attName,
 		}
 		return res, nil
-	}))))
+	})), "document.create"))
 
 	mux.Handle("/documents/view/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		var docid int64
