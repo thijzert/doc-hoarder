@@ -40,8 +40,37 @@ const logMessage = (msg, ...classes) => {
  */
 const listenForClicks = () => {
 	let apikeyInput = document.querySelector("#settings #apikey") || document.createElement("input");
+	let currentAPIKey = apikeyInput.value;
+	let apikeyStatus = document.querySelector("#settings #apikey-status") || document.createElement("div");
+
 	let saveApiKey = async (e) => {
-		await browser.storage.sync.set({"hoard-api-key": apikeyInput.value});
+		if ( apikeyInput.value == currentAPIKey ) {
+			return;
+		}
+		currentAPIKey = apikeyInput.value;
+
+		apikeyStatus.innerText = "…";
+
+		try {
+			const BASE_URL = "https://xxxxxxxxxxxxxxxxxxxxxxxx";
+
+			let form = new FormData();
+			form.append("api_key", apikeyInput.value);
+			await browser.storage.sync.set({"hoard-api-key": apikeyInput.value});
+			let resp = await fetch(BASE_URL + "api/user/whoami", {
+				method: "POST",
+				body: form
+			});
+			let who = await resp.json();
+			if ( who.hello ) {
+				apikeyStatus.innerText = `\u2713 Hi ${who.hello}`;
+			} else {
+				apikeyStatus.innerText = `\u274c`;
+			}
+		} catch ( e ) {
+			apikeyStatus.innerText = "\u274c";
+			console.error(e);
+		}
 	};
 	apikeyInput.addEventListener("keyup", saveApiKey);
 	apikeyInput.addEventListener("change", saveApiKey);
@@ -95,9 +124,9 @@ const listenForClicks = () => {
  * Display the popup's error message, and hide the normal UI.
  */
 function reportExecuteScriptError(error) {
+	console.error(`Failed to execute content script: ${error.message}`);
 	document.querySelector("#popup-content").classList.add("hidden");
 	document.querySelector("#error-content").classList.remove("hidden");
-	console.error(`Failed to execute content script: ${error.message}`);
 }
 
 

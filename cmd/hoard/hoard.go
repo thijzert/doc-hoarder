@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -105,6 +106,8 @@ func main() {
 		return h
 	}
 
+	mustKey := login.MustHaveAPIKey(userStore)
+
 	mux := http.NewServeMux()
 	mux.Handle("/", plumbing.LandingPageOnly(mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		docids, err := docStore.DocumentIDs(r.Context())
@@ -199,6 +202,16 @@ func main() {
 			Contents:    ext,
 		}, nil
 	}), "page/asset"))
+
+	mux.Handle("/api/user/whoami", plumbing.CORS(mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		user := login.GetUser(r)
+		if user == nil {
+			return nil, errors.New("nil user")
+		}
+		return struct {
+			Hello string `json:"hello"`
+		}{user.GivenName}, nil
+	})))))
 
 	mux.Handle("/api/new-doc", plumbing.CORS(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		key := r.FormValue("api_key")
