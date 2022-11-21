@@ -1,0 +1,21 @@
+
+main.user-profile {
+	section.profile {
+		.-avatar-ctr {
+			display: flex;
+			
+			.-avatar {
+				@include bgcol(ui-disabled-back);
+				width: 8rem;
+				height: 8rem;
+				border-radius: 4rem;
+				margin-right: 2rem;
+				background-size: cover;
+			}
+
+			h1.-fullname {
+				font-weight: lighter;
+			}
+		}
+	}
+}

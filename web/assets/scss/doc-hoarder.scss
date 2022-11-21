@@ -9,8 +9,21 @@
 @import "components/navbar";
 
 @import "pages/ui";
+@import "pages/user-profile";
 
 
+main {
+	margin-top: .75rem;
+
+	> section {
+		margin-bottom: 1.5rem;
+
+		&.-panel {
+			@include bgcol(panel-back);
+			padding: 1.5rem;
+		}
+	}
+}
 
 @media screen and (min-width: $cutoff-desktop) {
 	main {
@@ -26,7 +39,8 @@
 @media screen and (max-width: $cutoff-desktop - $epsilon) {
 	main {
 		> section {
-			margin: $gutter;
+			margin-left: $gutter;
+			margin-right: $gutter;
 		}
 	}
 }

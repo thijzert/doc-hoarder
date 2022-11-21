@@ -1,0 +1,47 @@
+{{define `contents`}}
+
+<main class="user-profile">
+
+	<section class="profile">
+		<div class="-avatar-ctr">
+			<aside class="-avatar"></aside>
+			<aside class="-rest">
+				<!--<h1 class="-fullname">{{.User.FullName}}</h1>-->
+				<h1 class="-fullname">Profile</h1>
+			</aside>
+		</div>
+	</section>
+
+	<section class="-panel">
+		<h2>API keys</h2>
+		{{if not .PageData.APIKeys}}
+			<p class="-404">No API keys found</p>
+		{{else}}
+			<ul class="api-keys">
+				{{range $_, $key := .PageData.APIKeys}}
+					<li>
+						<span class="-keyid">{{$key.ID}}:<span class="-secret">xxxxxxxxxxxxxxxxx</span></span>
+						<span class="-label">{{$key.Label}}</span>
+					</li>
+				{{end}}
+			</ul>
+		{{end}}
+
+		<aside>
+			<button id="btn-new-api-key">Add a new key</button>
+		</aside>
+
+		<dialog id="dlg-new-api-key">
+			<h3>New API key added</h3>
+			<div><code class="-apikey"></code></div>
+			<aside>
+				<button class="-close">Got it</button>
+			</aside>
+		</dialog>
+		
+	</section>
+
+</main>
+
+<script type="module" src="assets/js/pages/user-profile.js"></script>
+{{end}}

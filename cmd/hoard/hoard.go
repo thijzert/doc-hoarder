@@ -119,6 +119,17 @@ func main() {
 	}), "page/home"))))
 	mux.Handle("/auth/callback", sessions.WithSession(sessStore, lg.Callback()))
 
+	mux.Handle("/user/profile", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		user := login.GetUser(r)
+		if user == nil {
+			return nil, errors.New("nil user")
+		}
+		apikeys, err := userStore.GetAPIKeysForUser(r.Context(), user.ID)
+		return struct {
+			APIKeys []login.APIKey
+		}{apikeys}, err
+	}), "page/user-profile")))
+
 	mux.Handle("/assets/ui-showcase", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		return nil, nil
 	}), "page/ui"))
@@ -202,6 +213,22 @@ func main() {
 			Contents:    ext,
 		}, nil
 	}), "page/asset"))
+
+	mux.Handle("/api/user/new-api-key", mustLogin(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		user := login.GetUser(r)
+		if user == nil {
+			return nil, errors.New("nil user")
+		}
+
+		secret, err := userStore.NewAPIKeyForUser(r.Context(), user.ID, r.FormValue("label"))
+		if err != nil {
+			return nil, err
+		}
+
+		return struct {
+			APIKey string `json:"apikey"`
+		}{secret}, nil
+	}))))
 
 	mux.Handle("/api/user/whoami", plumbing.CORS(mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		user := login.GetUser(r)
