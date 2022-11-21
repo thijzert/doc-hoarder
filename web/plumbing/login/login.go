@@ -39,6 +39,7 @@ type Store interface {
 	GetUserByAPIKey(ctx context.Context, apikey string) (User, error)
 	GetAPIKeysForUser(ctx context.Context, userID UserID) ([]APIKey, error)
 	NewAPIKeyForUser(ctx context.Context, userID UserID, label string) (string, error)
+	DisableAPIKey(ctx context.Context, userID UserID, id KeyID) error
 }
 
 type StorageMethod func(string) (Store, error)

@@ -16,7 +16,9 @@ type KeyID string
 type APIKey struct {
 	ID        KeyID
 	User      UserID
+	Disabled  bool
 	Label     string
+	Scope     string
 	HashValue []byte
 }
 
@@ -30,6 +32,10 @@ func sum512(s []byte) []byte {
 }
 
 func (a APIKey) Check(apikey string) bool {
+	if a.Disabled {
+		return false
+	}
+
 	id, _, found := strings.Cut(apikey, ":")
 	if !found {
 		return false

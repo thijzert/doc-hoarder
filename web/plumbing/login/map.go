@@ -91,7 +91,7 @@ func (m mapStore) GetAPIKeysForUser(ctx context.Context, userID UserID) ([]APIKe
 	defer m.Mu.Unlock()
 	var rv []APIKey
 	for _, key := range m.APIKeys {
-		if key.User == userID {
+		if key.User == userID && !key.Disabled {
 			rv = append(rv, key)
 		}
 	}
@@ -113,6 +113,18 @@ func (m mapStore) NewAPIKeyForUser(ctx context.Context, userID UserID, label str
 		return "", err
 	}
 	return secret, nil
+}
+
+func (m mapStore) DisableAPIKey(ctx context.Context, userID UserID, id KeyID) error {
+	m.Mu.Lock()
+	defer m.Mu.Unlock()
+	for i, key := range m.APIKeys {
+		if key.User == userID && key.ID == id {
+			key.Disabled = true
+			m.APIKeys[i] = key
+		}
+	}
+	return m.saveContents(ctx)
 }
 
 func init() {

@@ -22,6 +22,9 @@
 					<li>
 						<span class="-keyid">{{$key.ID}}:<span class="-secret">xxxxxxxxxxxxxxxxx</span></span>
 						<span class="-label">{{$key.Label}}</span>
+						<span class="-buttons">
+							<button class="-js-delete-api-key -icon -delete -small" data-key-id="{{$key.ID}}">x</button>
+						</span>
 					</li>
 				{{end}}
 			</ul>

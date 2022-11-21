@@ -124,10 +124,20 @@ func main() {
 		if user == nil {
 			return nil, errors.New("nil user")
 		}
-		apikeys, err := userStore.GetAPIKeysForUser(r.Context(), user.ID)
+		allApikeys, err := userStore.GetAPIKeysForUser(r.Context(), user.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		apikeys := make([]login.APIKey, 0, len(allApikeys))
+		for _, k := range allApikeys {
+			if !k.Disabled {
+				apikeys = append(apikeys, k)
+			}
+		}
 		return struct {
 			APIKeys []login.APIKey
-		}{apikeys}, err
+		}{apikeys}, nil
 	}), "page/user-profile")))
 
 	mux.Handle("/assets/ui-showcase", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
@@ -228,6 +238,21 @@ func main() {
 		return struct {
 			APIKey string `json:"apikey"`
 		}{secret}, nil
+	}))))
+	mux.Handle("/api/user/disable-api-key", mustLogin(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		user := login.GetUser(r)
+		if user == nil {
+			return nil, errors.New("nil user")
+		}
+
+		err := userStore.DisableAPIKey(r.Context(), user.ID, login.KeyID(r.FormValue("key_id")))
+		if err != nil {
+			return nil, err
+		}
+
+		return struct {
+			Message string `json:"_"`
+		}{"ok"}, nil
 	}))))
 
 	mux.Handle("/api/user/whoami", plumbing.CORS(mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
