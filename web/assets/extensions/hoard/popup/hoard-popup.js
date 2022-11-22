@@ -126,7 +126,7 @@ const listenForClicks = () => {
 function reportExecuteScriptError(error) {
 	console.error(`Failed to execute content script: ${error.message}`);
 	document.querySelector("#popup-content").classList.add("hidden");
-	document.querySelector("#error-content").classList.remove("hidden");
+	//document.querySelector("#error-content").classList.remove("hidden");
 }
 
 

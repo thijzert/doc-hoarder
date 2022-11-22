@@ -160,6 +160,7 @@
 			if ( u != "" && u.substr(0,5) != "data:" ) {
 				try {
 					let s = await attachImg(u)
+					return s;
 				} catch ( _e ) { console.error(_e); }
 			}
 		};
@@ -238,6 +239,34 @@
 					if ( rule instanceof CSSImportRule ) {
 						let imp = await attachCSS(rule.styleSheet);
 						attcnt += `@import url("${imp}");`;
+					} else if ( rule instanceof CSSStyleRule ) {
+						let resetStyle = {};
+						for ( let k of rule.style ) {
+							if ( k == "background-image" ) {
+								let m = rule.style[k].match(/^url\(\s*\"([^\"]+)\"\s*\)/)
+								console.log("attaching", m);
+								if ( m ) {
+									resetStyle[k] = rule.style[k];
+									let s = await tryAttach(m[1]);
+									if ( s ) {
+										// HACK: reference attachments local to attached style sheets
+										if ( s.slice(0,4) == "att/" ) { s = s.slice(4); }
+
+										//rule.style[k] = rule.style[k].replace(m[0], s);
+										rule.style[k] = `url(\"${s}\")`;
+									}
+									console.log("attached ", s, rule.cssText);
+								}
+							}
+						}
+						attcnt += rule.cssText;
+						// HACK: reset the style rule to its previous value, so there are no requests
+						// for attached files to the origin server
+						for ( let k in resetStyle ) {
+							if ( resetStyle.hasOwnProperty(k) ) {
+								rule.style[k] = resetStyle[k];
+							}
+						}
 					} else {
 						attcnt += rule.cssText;
 					}
