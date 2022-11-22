@@ -84,6 +84,9 @@
 				body: uploadForm,
 			});
 			let uploadResult = await upload.json();
+			if ( !uploadResult.ok ) {
+				console.error(uploadResult);
+			}
 			idx += UPLOAD_CHUNK_SIZE;
 		} while ( idx < contents.size );
 	}
@@ -144,11 +147,19 @@
 			let fileExt = blob.type.substr(6);
 			if ( fileExt == "svg+xml" ) {
 				fileExt = "svg";
+			} else if ( fileExt == "vnd.microsoft.icon" ) {
+				fileExt = "ico";
 			}
 
 			att_id.body.append("ext", fileExt);
 			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
+			if ( !att_id.ok ) {
+				console.error(att_id);
+			}
 			att_id = await att_id.json();
+			if ( !att_id.attachment_id ) {
+				console.error(att_id);
+			}
 			let filename = att_id.filename;
 			att_id = att_id.attachment_id;
 			imageAttachments[image_url] = filename;
@@ -307,16 +318,21 @@
 		}
 
 		for ( let link of doc.querySelectorAll("link") ) {
-			if ( link.rel != "stylesheet" ) {
-				continue;
-			}
-
-			let href = link.href.toString();
-			if ( cssAttachments.hasOwnProperty(href) ) {
-				link.href = cssAttachments[href];
-			} else {
-				link.rel = "defunct-stylesheet";
-				console.error("css link not found", link.href, cssAttachments);
+			if ( link.rel == "stylesheet" ) {
+				let href = link.href.toString();
+				if ( cssAttachments.hasOwnProperty(href) ) {
+					link.href = cssAttachments[href];
+				} else {
+					link.rel = "defunct-stylesheet";
+					console.error("css link not found", link.href, cssAttachments);
+				}
+			} else if ( link.rel == "dns-prefetch" || link.rel == "preconnect" ) {
+				rm(link);
+			} else if ( link.rel == "icon" || link.rel == "apple-touch-icon" ) {
+				let icon = await tryAttach(link.href);
+				if ( icon ) {
+					link.href = icon;
+				}
 			}
 		}
 

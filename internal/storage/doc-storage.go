@@ -77,7 +77,7 @@ func AttachmentNameFromID(ctx context.Context, trns DocTransaction, att_id strin
 
 	var f io.ReadCloser
 	var err error
-	for _, e := range []string{"css", "svg", "png", "jpeg", "svg"} {
+	for _, e := range []string{"css", "svg", "png", "jpeg", "ico"} {
 		attName := "t" + att_id + "." + e
 		f, err = trns.ReadAttachment(ctx, attName)
 		if err == nil {

@@ -315,7 +315,7 @@ func main() {
 		}
 
 		ext := strings.ToLower(r.FormValue("ext"))
-		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" {
+		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" && ext != "ico" {
 			return nil, plumbing.BadRequest("Invalid extension '%s'", ext)
 		}
 
@@ -358,8 +358,10 @@ func main() {
 		}
 
 		res := struct {
+			OK      bool   `json:"ok"`
 			Message string `json:"_"`
 		}{
+			OK:      true,
 			Message: "Chunk uploaded successfully",
 		}
 		return res, nil
@@ -409,8 +411,10 @@ func main() {
 		}
 
 		res := struct {
+			OK      bool   `json:"ok"`
 			Message string `json:"_"`
 		}{
+			OK:      true,
 			Message: "Chunk uploaded successfully",
 		}
 		return res, nil
