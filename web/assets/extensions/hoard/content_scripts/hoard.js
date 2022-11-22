@@ -203,7 +203,7 @@
 			} else if ( rule instanceof CSSStyleRule ) {
 				let resetStyle = {};
 				for ( let k of rule.style ) {
-					if ( k == "background-image" ) {
+					if ( k == "background-image" || k == "list-style-image" || k == "content" || k == "cursor" ) {
 						let m = rule.style[k].match(/^url\(\s*\"([^\"]+)\"\s*\)/)
 						console.log("attaching", m);
 						if ( m ) {
