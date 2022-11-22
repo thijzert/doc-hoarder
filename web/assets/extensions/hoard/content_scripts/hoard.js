@@ -141,7 +141,12 @@
 				throw "unknown mime type '" + blob.type + "'";
 			}
 
-			att_id.body.append("ext", blob.type.substr(6));
+			let fileExt = blob.type.substr(6);
+			if ( fileExt == "svg+xml" ) {
+				fileExt = "svg";
+			}
+
+			att_id.body.append("ext", fileExt);
 			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
 			att_id = await att_id.json();
 			let filename = att_id.filename;
@@ -163,6 +168,38 @@
 					return s;
 				} catch ( _e ) { console.error(_e); }
 			}
+		};
+
+		let attachStyleRule = async (rule) => {
+			let resetStyle = {};
+			for ( let k of rule.style ) {
+				if ( k == "background-image" ) {
+					let m = rule.style[k].match(/^url\(\s*\"([^\"]+)\"\s*\)/)
+					console.log("attaching", m);
+					if ( m ) {
+						resetStyle[k] = rule.style[k];
+						let s = await tryAttach(m[1]);
+						if ( s ) {
+							// HACK: reference attachments local to attached style sheets
+							if ( s.slice(0,4) == "att/" ) { s = s.slice(4); }
+
+							//rule.style[k] = rule.style[k].replace(m[0], s);
+							rule.style[k] = `url(\"${s}\")`;
+						}
+						console.log("attached ", s, rule.cssText);
+					}
+				}
+			}
+			let rv = rule.cssText + "\n";
+			// HACK: reset the style rule to its previous value, so there are no requests
+			// for attached files to the origin server
+			for ( let k in resetStyle ) {
+				if ( resetStyle.hasOwnProperty(k) ) {
+					rule.style[k] = resetStyle[k];
+				}
+			}
+
+			return rv;
 		};
 
 
@@ -240,33 +277,18 @@
 						let imp = await attachCSS(rule.styleSheet);
 						attcnt += `@import url("${imp}");`;
 					} else if ( rule instanceof CSSStyleRule ) {
-						let resetStyle = {};
-						for ( let k of rule.style ) {
-							if ( k == "background-image" ) {
-								let m = rule.style[k].match(/^url\(\s*\"([^\"]+)\"\s*\)/)
-								console.log("attaching", m);
-								if ( m ) {
-									resetStyle[k] = rule.style[k];
-									let s = await tryAttach(m[1]);
-									if ( s ) {
-										// HACK: reference attachments local to attached style sheets
-										if ( s.slice(0,4) == "att/" ) { s = s.slice(4); }
-
-										//rule.style[k] = rule.style[k].replace(m[0], s);
-										rule.style[k] = `url(\"${s}\")`;
-									}
-									console.log("attached ", s, rule.cssText);
-								}
+						attcnt += await attachStyleRule(rule);
+					} else if ( rule instanceof CSSMediaRule ) {
+						attcnt += `@media ${rule.conditionText} {\n`;
+						for ( let rr of rule.cssRules ) {
+							if ( rr instanceof CSSStyleRule ) {
+								attcnt += "    " + await attachStyleRule(rr);
+							} else {
+								console.log("mediarule contains ", rr);
+								attcnt += "    " + rr.cssText + "\n";
 							}
 						}
-						attcnt += rule.cssText;
-						// HACK: reset the style rule to its previous value, so there are no requests
-						// for attached files to the origin server
-						for ( let k in resetStyle ) {
-							if ( resetStyle.hasOwnProperty(k) ) {
-								rule.style[k] = resetStyle[k];
-							}
-						}
+						attcnt += `}\n`;
 					} else {
 						attcnt += rule.cssText;
 					}
