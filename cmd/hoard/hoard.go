@@ -287,6 +287,40 @@ func main() {
 		}
 		return res, nil
 	})), "document.create"))
+	mux.Handle("/api/capture-new-doc", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		user := login.GetUser(r)
+		if user == nil {
+			return nil, errors.New("nil user")
+		}
+		page_url := r.FormValue("page_url")
+
+		// trns, ok, err := cache.GetDocumentByURL(ctx, string(user.ID), page_url)
+
+		docid, err := docStore.NewDocumentID(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		trns, err := docStore.GetDocument(docid)
+		if err != nil {
+			return nil, err
+		}
+
+		meta := storage.DocumentMeta{
+			URL: page_url,
+		}
+		meta.Permissions.Owner = string(user.ID)
+		err = storage.WriteMeta(r.Context(), trns, meta)
+		if err != nil {
+			return nil, err
+		}
+
+		res := struct {
+			ID string `json:"id"`
+		}{
+			ID: docid,
+		}
+		return res, nil
+	})), "document.create"))
 
 	draftAPI := func(r *http.Request) (storage.DocTransaction, error) {
 		user := login.GetUser(r)
@@ -308,6 +342,47 @@ func main() {
 
 		return trns, nil
 	}
+
+	mux.Handle("/api/finalize-draft", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		trns, err := draftAPI(r)
+		if err != nil {
+			return nil, err
+		}
+
+		meta, err := storage.ReadMeta(r.Context(), trns)
+		if err != nil {
+			return nil, err
+		}
+
+		setForm := func(tgt *string, param string) {
+			s := strings.TrimSpace(r.FormValue(param))
+			if s != "" {
+				*tgt = s
+			}
+		}
+
+		setForm(&meta.Title, "doc_title")
+		setForm(&meta.Author, "doc_author")
+		setForm(&meta.IconID, "icon_id")
+
+		meta.Status = "static"
+		meta.CaptureDate = time.Now()
+
+		err = storage.WriteMeta(r.Context(), trns, meta)
+		if err != nil {
+			return nil, err
+		}
+
+		logMessage := "Finalize upload"
+		setForm(&logMessage, "log_message")
+
+		err = trns.Commit(r.Context(), logMessage)
+		if err != nil {
+			return nil, err
+		}
+		return okay("Document saved")
+	})), "document.create"))
+
 	mux.Handle("/api/new-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
 		if err != nil {
@@ -357,14 +432,7 @@ func main() {
 			return nil, err
 		}
 
-		res := struct {
-			OK      bool   `json:"ok"`
-			Message string `json:"_"`
-		}{
-			OK:      true,
-			Message: "Chunk uploaded successfully",
-		}
-		return res, nil
+		return okay("Chunk uploaded successfully")
 	})), "document.create"))
 	mux.Handle("/api/upload-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
@@ -410,14 +478,7 @@ func main() {
 			return nil, err
 		}
 
-		res := struct {
-			OK      bool   `json:"ok"`
-			Message string `json:"_"`
-		}{
-			OK:      true,
-			Message: "Chunk uploaded successfully",
-		}
-		return res, nil
+		return okay("Chunk uploaded successfully")
 	})), "document.create"))
 	mux.Handle("/api/download-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		trns, err := draftAPI(r)
@@ -587,4 +648,16 @@ func strstr(s, prefix string) bool {
 		return false
 	}
 	return s[:len(prefix)] == prefix
+}
+
+type okayStruc struct {
+	OK      bool   `json:"ok"`
+	Message string `json:"_"`
+}
+
+func okay(format string, a ...interface{}) (okayStruc, error) {
+	return okayStruc{
+		OK:      true,
+		Message: fmt.Sprintf(format, a...),
+	}, nil
 }

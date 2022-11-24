@@ -95,10 +95,11 @@
 		const BASE_URL = "https://xxxxxxxxxxxxxxxxxxxxxxxx";
 		const API_KEY = apikey;
 
-		let with_apikey = {method: "POST", body: new FormData()}
-		with_apikey.body.append("api_key", API_KEY);
+		let new_doc = {method: "POST", body: new FormData()}
+		new_doc.body.append("api_key", API_KEY);
+		new_doc.body.append("page_url", location.href);
 
-		let doc_id = await fetch(BASE_URL + "api/new-doc", with_apikey)
+		let doc_id = await fetch(BASE_URL + "api/capture-new-doc", new_doc)
 		doc_id = await doc_id.json();
 
 		console.log("doc_id:", doc_id.id);
@@ -116,6 +117,8 @@
 		for ( let sc of doc.querySelectorAll("script") ) {
 			rm(sc);
 		}
+
+		let icon_id = null;
 
 		let imageAttachments = {};
 		let attachImg = async (image_url) => {
@@ -332,6 +335,9 @@
 				let icon = await tryAttach(link.href);
 				if ( icon ) {
 					link.href = icon;
+					if ( !icon_id || link.rel == "apple-touch-icon" ) {
+						icon_id = icon;
+					}
 				}
 			}
 		}
@@ -364,6 +370,28 @@
 			"api_key": API_KEY,
 			"doc_id": doc_id.id,
 		});
+
+		if ( !icon_id ) {
+			icon_id = await tryAttach("/favicon.ico");
+		}
+		if ( icon_id ) {
+			let m = icon_id.match(/^(att\/)?(\w+)(\.\w+)?/);
+			if ( m ) {
+				icon_id = m[2];
+			}
+		}
+
+		let finalize = {method: "POST", body: new FormData()}
+		finalize.body.append("api_key", API_KEY);
+		finalize.body.append("doc_id", doc_id.id);
+		finalize.body.append("doc_title", document.title);
+		finalize.body.append("doc_author", ""); // TODO
+		finalize.body.append("icon_id", icon_id);
+		finalize.body.append("log_message", "Saved page from web extension");
+		finalize = await fetch(BASE_URL + "api/finalize-draft", finalize);
+		if ( !finalize.ok ) { console.error(finalize); }
+		finalize = await finalize.json();
+		if ( !finalize.ok ) { console.error(finalize); }
 
 		return {
 			success: true,
