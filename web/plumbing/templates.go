@@ -10,11 +10,14 @@ import (
 
 type TemplateData struct {
 	AppRoot      string
+	AppVersion   string
 	TemplateName string
 	PageData     interface{}
 	Session      *sessions.Session
 	User         *login.User
 }
+
+var version string
 
 var localTemplates map[string]*template.Template
 

@@ -217,7 +217,7 @@ func compile(ctx context.Context, conf compileConfig) error {
 	compileArgs := append([]string{
 		"build",
 		"-o", execOutput,
-		"-ldflags", fmt.Sprintf("-X 'main.Version=%s' -X 'main.BaseURL=%s'", conf.Version, conf.BaseURL),
+		"-ldflags", fmt.Sprintf("-X 'main.Version=%s' -X 'main.BaseURL=%s' -X 'github.com/thijzert/doc-hoarder/web/plumbing.version=%s'", conf.Version, conf.BaseURL, conf.Version),
 	}, gofiles...)
 
 	compileCmd := exec.CommandContext(ctx, "go", compileArgs...)
