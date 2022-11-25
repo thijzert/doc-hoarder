@@ -8,8 +8,10 @@
 
 	<section>
 		<ul>
-			{{ range $docid := .PageData }}
-			<li><a href="documents/view/g{{$docid}}/">g{{$docid}}</a></li>
+			{{ $metas := .PageData.Metas }}
+			{{ range $i, $docid := .PageData.IDs }}
+				{{ $meta := index $metas $i }}
+				<li><a href="documents/view/g{{$docid}}/">{{$meta.Title}}</a></li>
 			{{ end }}
 		</ul>
 	</section>

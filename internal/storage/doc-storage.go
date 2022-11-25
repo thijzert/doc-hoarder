@@ -30,6 +30,7 @@ type DocTransaction interface {
 	WriteAttachment(context.Context, string) (io.WriteCloser, error)
 
 	Commit(context.Context, string) error
+	Rollback() error
 }
 
 func NewDocumentID() string {
@@ -88,7 +89,15 @@ func AttachmentNameFromID(ctx context.Context, trns DocTransaction, att_id strin
 	return "", err
 }
 
+type Limit struct {
+	Offset int
+	Limit  int
+}
+
 type DocumentCache interface {
+	GetDocuments(context.Context, string, Limit) ([]string, []DocumentMeta, error)
+	GetDocumentByURL(context.Context, string, string) (DocTransaction, bool, error)
+	GetDocumentMeta(context.Context, string) (DocumentMeta, error)
 }
 
 type CacheMethod func(string, DocStore) (DocumentCache, error)

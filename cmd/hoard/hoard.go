@@ -40,6 +40,7 @@ func main() {
 	}
 
 	docStoreLocation := ""
+	docCacheLocation := ""
 	sessionStoreLocation := ""
 	userStoreLocation := ""
 	loginProviderID := ""
@@ -47,6 +48,7 @@ func main() {
 	cmdline := flag.NewFlagSet("dochoarder", flag.ContinueOnError)
 
 	cmdline.StringVar(&docStoreLocation, "docstore", "", "Type and location for backend document store, e.g. 'fs:/path/to/documents'")
+	cmdline.StringVar(&docCacheLocation, "documentcache", "", "Type and location for document cache")
 	cmdline.StringVar(&sessionStoreLocation, "sessionstore", "", "Type and location for session store, e.g. 'file:/path/to/sessions.json'")
 	cmdline.StringVar(&userStoreLocation, "userprofilestore", "", "Type and location for user profile store, e.g. 'file:/path/to/userprofile.json'")
 	cmdline.StringVar(&loginProviderID, "login", "", "Type and URL for login provider, e.g. 'oidc:https://CLIENT_ID:CLIENT_SECRET@login.example.org/auth/realms/example'")
@@ -63,6 +65,10 @@ func main() {
 	log.Printf("Doc-hoarder version %s", Version)
 
 	docStore, err := storage.GetDocStore(docStoreLocation)
+	if err != nil {
+		log.Fatal(err)
+	}
+	docCache, err := storage.GetDocumentCache(docCacheLocation, docStore)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -114,13 +120,16 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", plumbing.LandingPageOnly(mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		// documents, err := cache.GetDocuments(r.Context(), user.ID)
-		docids, err := docStore.DocumentIDs(r.Context())
+		user := login.GetUser(r)
+		ids, metas, err := docCache.GetDocuments(r.Context(), string(user.ID), storage.Limit{0, 200})
 		if err != nil {
 			return nil, err
 		}
 
-		return docids, nil
+		return struct {
+			IDs   []string
+			Metas []storage.DocumentMeta
+		}{ids, metas}, nil
 	}), "page/home"))))
 	mux.Handle("/auth/callback", sessions.WithSession(sessStore, lg.Callback()))
 

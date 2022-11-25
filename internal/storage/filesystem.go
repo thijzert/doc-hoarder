@@ -152,3 +152,7 @@ func (t jankyTransaction) WriteAttachment(ctx context.Context, name string) (io.
 func (t jankyTransaction) Commit(ctx context.Context, name string) error {
 	return nil
 }
+
+func (t jankyTransaction) Rollback() error {
+	return nil
+}
