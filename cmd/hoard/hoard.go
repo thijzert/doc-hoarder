@@ -114,6 +114,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", plumbing.LandingPageOnly(mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		// documents, err := cache.GetDocuments(r.Context(), user.ID)
 		docids, err := docStore.DocumentIDs(r.Context())
 		if err != nil {
 			return nil, err
@@ -306,7 +307,8 @@ func main() {
 		}
 
 		meta := storage.DocumentMeta{
-			URL: page_url,
+			URL:    page_url,
+			Status: storage.StatusDraft,
 		}
 		meta.Permissions.Owner = string(user.ID)
 		err = storage.WriteMeta(r.Context(), trns, meta)
@@ -331,13 +333,26 @@ func main() {
 		draft_id := strings.ToLower(r.FormValue("doc_id"))
 		_, err := hex.DecodeString(draft_id)
 		if err != nil || len(draft_id) != 10 {
-			return nil, plumbing.BadRequest("invalid draft ID")
+			return nil, weberrors.BadRequest("invalid draft ID")
 		}
-		// TODO: check that the document has draft status, and that it's yours
+
+		// meta, err := cache.GetDocumentMeta(draft_id)
 
 		trns, err := docStore.GetDocument(draft_id)
 		if err != nil {
 			return nil, err
+		}
+		meta, err := storage.ReadMeta(r.Context(), trns)
+		if err != nil {
+			return nil, err
+		}
+
+		if login.UserID(meta.Permissions.Owner) != user.ID {
+			// TODO: check WriteUsers and WriteGroups
+			return nil, weberrors.Forbidden("you do not have permission to write this document")
+		}
+		if meta.Status != storage.StatusDraft {
+			return nil, weberrors.Forbidden("this document does not have draft status")
 		}
 
 		return trns, nil

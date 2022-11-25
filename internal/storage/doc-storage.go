@@ -87,3 +87,34 @@ func AttachmentNameFromID(ctx context.Context, trns DocTransaction, att_id strin
 	}
 	return "", err
 }
+
+type DocumentCache interface {
+}
+
+type CacheMethod func(string, DocStore) (DocumentCache, error)
+
+var allCacheMethods map[string]CacheMethod
+
+func RegisterCacheMethod(name string, f CacheMethod) {
+	if allCacheMethods == nil {
+		allCacheMethods = make(map[string]CacheMethod)
+	}
+	allCacheMethods[name] = f
+}
+
+func GetDocumentCache(descriptor string, store DocStore) (DocumentCache, error) {
+	i := strings.IndexRune(descriptor, ':')
+	name := ""
+	if i >= 0 {
+		name = descriptor[:i]
+		descriptor = descriptor[i+1:]
+	}
+	if allCacheMethods == nil {
+		return nil, fmt.Errorf("no storage backends have been initialized")
+	}
+
+	if f, ok := allCacheMethods[name]; ok {
+		return f(descriptor, store)
+	}
+	return nil, fmt.Errorf("storage backend '%s' not registered", name)
+}

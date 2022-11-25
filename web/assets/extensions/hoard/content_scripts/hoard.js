@@ -136,6 +136,9 @@
 				att_id.body.append("url", url.toString());
 				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
 				att_id = await att_id.json();
+				if ( !att_id.filename ) {
+					console.error(att_id);
+				}
 				imageAttachments[image_url] = att_id.filename;
 				return att_id.filename;
 			}
@@ -375,7 +378,7 @@
 			icon_id = await tryAttach("/favicon.ico");
 		}
 		if ( icon_id ) {
-			let m = icon_id.match(/^(att\/)?(\w+)(\.\w+)?/);
+			let m = icon_id.match(/^(att\/)?(\w+)(\.\w+)?/); // HACK
 			if ( m ) {
 				icon_id = m[2];
 			}
