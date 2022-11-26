@@ -410,14 +410,16 @@
 
 
 		// Remove scripting attributes (onclick, onload, onerror, etc)
-		let rmAttr = {};
+		let rmAttr = {
+			"data-ga": 1,
+		};
 		for ( let elt of doc.querySelectorAll("*") ) {
 			if ( elt.attributes.length == 0 ) {
 				continue;
 			}
 			let found = false;
 			for ( let att of elt.attributes ) {
-				if ( att.name.substr(0,2) == "on" ) {
+				if ( att.name in rmAttr || att.name.substr(0,2) == "on" ) {
 					rmAttr[att.name] = 1;
 					found = true;
 				}
@@ -426,6 +428,18 @@
 				for ( let att in rmAttr ) {
 					elt.removeAttribute(att);
 				}
+			}
+		}
+		for ( let elt of doc.body.querySelectorAll("*") ) {
+			if ( elt.nodeName == "style" ) {
+				continue;
+			}
+			if ( elt.nodeName == "svg" || elt.nodeName == "g" ) {
+				continue;
+			}
+			if ( window.getComputedStyle(elt).getPropertyValue("display") == "none" ) {
+				// console.log("maybe remove this one?", elt)
+				rm(elt);
 			}
 		}
 
