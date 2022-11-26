@@ -59,6 +59,32 @@
 		return rv + ">";
 	}
 
+	const splitFirst = (s, sep) => {
+		let a = s.indexOf(sep);
+		if ( a < 0 ) {
+			return [ s, "" ];
+		}
+		return [ s.slice(0,a), s.slice(a+sep.length) ];
+	}
+	const parseSrcset = (img) => {
+		rv = [];
+		let srcset = img.srcset.trim()
+		while ( srcset != "" ) {
+			let pts = splitFirst(srcset, " ");
+			if ( pts[1] == "" ) {
+				break
+			}
+			let url = pts[0];
+			pts = splitFirst(pts[1].trim(), ",")
+			let spec = pts[0];
+
+			srcset = pts[1].trim();
+			rv.push({url, spec});
+		}
+
+		return rv;
+	};
+
 	const UPLOAD_CHUNK_SIZE = 512000;
 	const uploadFile = async (url, paramName, filename, contents, formParameters) => {
 		if ( !(contents instanceof Blob) ) {
@@ -183,29 +209,29 @@
 				try {
 					let s = await attachImg(u)
 					return s;
-				} catch ( _e ) { console.error(_e); }
+				} catch ( _e ) { console.error("error attaching image", u, _e); }
 			}
 		};
 
 
+
 		for ( let img of document.images ) {
 			await tryAttach(img.src);
-			for ( let srcs of img.srcset.split(",") ) {
-				srcs = srcs.trim().split(" ");
-				await tryAttach(srcs[0]);
+			for ( let srcs of parseSrcset(img) ) {
+				await tryAttach(srcs.url);
 			}
 		}
+
 		for ( let img of doc.images ) {
 			if ( imageAttachments.hasOwnProperty(img.src) ) {
 				img.src = imageAttachments[img.src];
 			}
 			let srcset = [];
-			for ( let srcs of img.srcset.split(",") ) {
-				srcs = srcs.trim().split(" ");
-				if ( imageAttachments.hasOwnProperty(srcs[0]) ) {
-					srcs[0] = imageAttachments[srcs[0]];
+			for ( let srcs of parseSrcset(img) ) {
+				if ( imageAttachments.hasOwnProperty(srcs.url) ) {
+					srcs.url = imageAttachments[srcs.url];
 				}
-				srcset.push(srcs.join(" "));
+				srcset.push(`${srcs.url} ${srcs.spec}`);
 			}
 			img.srcset = srcset.join(", ");
 		}
