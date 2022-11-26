@@ -11,7 +11,7 @@
 
 
 	const rm = (node) => {
-		if ( node && node.forEach ) {
+		if ( node && (node instanceof Array || node instanceof NodeList) ) {
 			node.forEach(rm);
 			return;
 		}
@@ -143,9 +143,15 @@
 			}
 		}
 
-		for ( let sc of doc.querySelectorAll("script") ) {
+
+
+		rm(doc.querySelectorAll("noscript"));
+		rm(doc.querySelectorAll("object"));
+		rm(doc.querySelectorAll("iframe"));
+		for ( let sc of doc.scripts ) {
 			rm(sc);
 		}
+		rm(doc.querySelectorAll("script"));
 
 		let icon_id = null;
 
