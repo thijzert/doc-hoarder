@@ -369,13 +369,38 @@
 				}
 			} else if ( link.rel == "dns-prefetch" || link.rel == "preconnect" ) {
 				rm(link);
-			} else if ( link.rel == "icon" || link.rel == "apple-touch-icon" ) {
+			} else if ( link.rel == "preload" || link.rel == "amphtml" ) {
+				rm(link);
+			} else if ( /site-verification/.test(link.rel) ) {
+				rm(link);
+			} else if ( link.rel == "icon" || link.rel == "apple-touch-icon" || link.rel == "shortcut icon" || /^msapplication-/.test(link.rel) ) {
 				let icon = await tryAttach(link.href);
 				if ( icon ) {
 					link.href = icon;
 					if ( !icon_id || link.rel == "apple-touch-icon" ) {
 						icon_id = icon;
 					}
+				} else {
+					console.error("attaching icon failed", link.href, link);
+				}
+			}
+		}
+
+		for ( let meta of doc.querySelectorAll("meta") ) {
+			let mname = meta.name.toLowerCase();
+			let heqv = meta.httpEquiv.toLowerCase();
+			let prop = (meta.getAttribute("property") || "").toLowerCase();
+
+			if ( /site-verification/.test(mname) ) {
+				rm(meta);
+			} else if ( heqv == "origin-trial" || mname == "robots" ) {
+				rm(meta);
+			} else if ( mname == "icon" || mname == "apple-touch-icon" || mname == "shortcut icon" || /^msapplication-/.test(mname) || /:image/.test(mname) || /:image/.test(prop) ) {
+				let img = await tryAttach(meta.content);
+				if ( img ) {
+					meta.content = img;
+				} else {
+					console.error("attaching meta image failed", meta.content, meta);
 				}
 			}
 		}
