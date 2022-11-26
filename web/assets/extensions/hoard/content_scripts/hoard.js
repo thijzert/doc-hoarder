@@ -41,8 +41,6 @@
 	}});
 
 
-	const parser = new DOMParser();
-
 
 	const formatDTD = (doctype) => {
 		if (doctype === null) {
@@ -128,11 +126,16 @@
 		let doc_id = await fetch(BASE_URL + "api/capture-new-doc", new_doc)
 		doc_id = await doc_id.json();
 
-		console.log("doc_id:", doc_id.id);
+		console.log("doc_id:", doc_id.id, doc_id);
+		if ( !doc_id.id ) {
+			return { success: false, document_id: doc_id.id };
+		}
 
 
 		let contents = formatDTD(document.doctype) + "\n" + document.body.parentNode.outerHTML;
-		let doc = parser.parseFromString(contents, "text/html");
+		let doc = new Document();
+		let rootNode = doc.importNode(document.documentElement, true)
+		doc.append(rootNode);
 
 		for ( let h of siteHooks ) {
 			if ( h.re.test(location.href) ) {
