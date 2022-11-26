@@ -224,21 +224,24 @@
 
 
 
-		for ( let img of document.images ) {
-			await tryAttach(img.src);
-			for ( let srcs of parseSrcset(img) ) {
-				await tryAttach(srcs.url);
-			}
-		}
-
 		for ( let img of doc.images ) {
-			if ( imageAttachments.hasOwnProperty(img.src) ) {
-				img.src = imageAttachments[img.src];
+			// Disable lazy loading
+			for ( let k of ["src","srcset"] ) {
+				if ( k in img.dataset ) {
+					img[k] = img.dataset[k];
+					delete img.dataset[k];
+				}
+			}
+
+			let i = await tryAttach(img.src);
+			if ( i ) {
+				img.src = i;
 			}
 			let srcset = [];
 			for ( let srcs of parseSrcset(img) ) {
-				if ( imageAttachments.hasOwnProperty(srcs.url) ) {
-					srcs.url = imageAttachments[srcs.url];
+				let i = await tryAttach(srcs.url);
+				if ( i ) {
+					srcs.url = i;
 				}
 				srcset.push(`${srcs.url} ${srcs.spec}`);
 			}
