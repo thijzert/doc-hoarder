@@ -304,15 +304,24 @@ func main() {
 		}
 		page_url := r.FormValue("page_url")
 
-		// trns, ok, err := cache.GetDocumentByURL(ctx, string(user.ID), page_url)
-
-		docid, err := docStore.NewDocumentID(r.Context())
+		docid := ""
+		trns, ok, err := docCache.GetDocumentByURL(ctx, string(user.ID), page_url)
 		if err != nil {
+			log.Printf("Error reusing transaction: %v", err)
 			return nil, err
 		}
-		trns, err := docStore.GetDocument(docid)
-		if err != nil {
-			return nil, err
+		if ok {
+			docid = trns.DocumentID()
+			log.Printf("reused '%s'", docid)
+		} else {
+			docid, err = docStore.NewDocumentID(r.Context())
+			if err != nil {
+				return nil, err
+			}
+			trns, err = docStore.GetDocument(docid)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		meta := storage.DocumentMeta{

@@ -21,6 +21,8 @@ type DocStore interface {
 }
 
 type DocTransaction interface {
+	DocumentID() string
+
 	ReadRootFile(context.Context, string) (io.ReadCloser, error)
 	WriteRootFile(context.Context, string) (io.WriteCloser, error)
 

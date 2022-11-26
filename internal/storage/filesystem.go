@@ -81,24 +81,28 @@ func (jfs jankyFS) GetDocument(docID string) (DocTransaction, error) {
 
 	return jankyTransaction{
 		RootDirectory: jfs.RootDirectory,
-		DocumentID:    docID,
+		DocID:         docID,
 	}, nil
 }
 
 type jankyTransaction struct {
 	RootDirectory string
-	DocumentID    string
+	DocID         string
+}
+
+func (t jankyTransaction) DocumentID() string {
+	return t.DocID
 }
 
 func (t jankyTransaction) ReadRootFile(ctx context.Context, name string) (io.ReadCloser, error) {
-	return os.Open(path.Join(t.RootDirectory, "g"+t.DocumentID, name))
+	return os.Open(path.Join(t.RootDirectory, "g"+t.DocID, name))
 }
 func (t jankyTransaction) WriteRootFile(ctx context.Context, name string) (io.WriteCloser, error) {
-	return os.Create(path.Join(t.RootDirectory, "g"+t.DocumentID, name))
+	return os.Create(path.Join(t.RootDirectory, "g"+t.DocID, name))
 }
 
 func (t jankyTransaction) ListAttachments(ctx context.Context) ([]string, error) {
-	d, err := os.Open(path.Join(t.RootDirectory, "g"+t.DocumentID, "att"))
+	d, err := os.Open(path.Join(t.RootDirectory, "g"+t.DocID, "att"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
@@ -121,14 +125,14 @@ func (t jankyTransaction) ListAttachments(ctx context.Context) ([]string, error)
 	return rv, nil
 }
 func (t jankyTransaction) ReadAttachment(ctx context.Context, name string) (io.ReadCloser, error) {
-	return os.Open(path.Join(t.RootDirectory, "g"+t.DocumentID, "att", name))
+	return os.Open(path.Join(t.RootDirectory, "g"+t.DocID, "att", name))
 }
 func (t jankyTransaction) NewAttachmentID(ctx context.Context, ext string) (string, error) {
-	os.MkdirAll(path.Join(t.RootDirectory, "g"+t.DocumentID, "att"), 0755)
+	os.MkdirAll(path.Join(t.RootDirectory, "g"+t.DocID, "att"), 0755)
 	var rv string
 	for ctx.Err() == nil {
 		rv = NewDocumentID()
-		fp := path.Join(t.RootDirectory, "g"+t.DocumentID, "att", "t"+rv+"."+ext)
+		fp := path.Join(t.RootDirectory, "g"+t.DocID, "att", "t"+rv+"."+ext)
 		_, err := os.Stat(fp)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -145,8 +149,8 @@ func (t jankyTransaction) NewAttachmentID(ctx context.Context, ext string) (stri
 	return "", ctx.Err()
 }
 func (t jankyTransaction) WriteAttachment(ctx context.Context, name string) (io.WriteCloser, error) {
-	os.MkdirAll(path.Join(t.RootDirectory, "g"+t.DocumentID, "att"), 0755)
-	return os.Create(path.Join(t.RootDirectory, "g"+t.DocumentID, "att", name))
+	os.MkdirAll(path.Join(t.RootDirectory, "g"+t.DocID, "att"), 0755)
+	return os.Create(path.Join(t.RootDirectory, "g"+t.DocID, "att", name))
 }
 
 func (t jankyTransaction) Commit(ctx context.Context, name string) error {
