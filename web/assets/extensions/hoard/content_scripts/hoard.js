@@ -132,6 +132,15 @@
 		}
 
 
+		// Add an implicit ID to inline stylesheets - we'll need it later
+		for ( let ss of document.styleSheets ) {
+			if ( !ss.href ) {
+				let oid = "~~" + (""+Math.random()).substr(2) + (""+Math.random()).substr(2) + (""+Math.random()).substr(2);
+				ss.ownerNode.dataset.hoardStylesheet = oid;
+			}
+		}
+
+
 		let contents = formatDTD(document.doctype) + "\n" + document.body.parentNode.outerHTML;
 		let doc = new Document();
 		let rootNode = doc.importNode(document.documentElement, true)
@@ -299,12 +308,45 @@
 		let cssAttachments = {};
 		let attachCSS = async (stylesheet) => {
 			const stylesheet_href = stylesheet.href;
-			if ( !stylesheet_href || cssAttachments.hasOwnProperty(stylesheet_href) ) {
+			let att_id = null, filename = null;
+
+			if ( !stylesheet_href ) {
+				let ownernode = stylesheet.ownerNode;
+				if ( !("hoardStylesheet" in ownernode.dataset) ) {
+					return null;
+				}
+				if ( cssAttachments.hasOwnProperty(ownernode.dataset.hoardStylesheet) ) {
+					return cssAttachments[ownernode.dataset.hoardStylesheet];
+				}
+
+				try {
+					let inline_cnt = "";
+					for ( let rule of stylesheet.cssRules ) {
+						inline_cnt += await attachCSSRule(rule);
+					}
+					att_id = {method: "POST", body: new FormData()}
+					att_id.body.append("api_key", API_KEY);
+					att_id.body.append("doc_id", doc_id.id);
+					att_id.body.append("ext", "css");
+					att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
+					att_id = await att_id.json();
+					filename = att_id.filename;
+					att_id = att_id.attachment_id;
+					await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, inline_cnt, {
+						"api_key": API_KEY,
+						"doc_id": doc_id.id,
+						"att_id": att_id,
+					});
+
+					cssAttachments[ownernode.dataset.hoardStylesheet] = filename;
+				} catch ( _e ) { console.error(_e); }
+				return cssAttachments[ownernode.dataset.hoardStylesheet];
+			}
+
+			if ( cssAttachments.hasOwnProperty(stylesheet_href) ) {
 				return cssAttachments[stylesheet_href];
 			}
 			console.log("Attaching CSS ", stylesheet_href);
-
-			let att_id = null, filename = null;
 
 			let url = new URL(stylesheet_href, location.href);
 			if ( url.origin !== location.origin ) {
@@ -386,6 +428,16 @@
 				} else {
 					console.error("attaching icon failed", link.href, link);
 				}
+			}
+		}
+		for ( let st of doc.querySelectorAll("style") ) {
+			let oid = st.dataset.hoardStylesheet;
+			if ( cssAttachments.hasOwnProperty(oid) ) {
+				let link = doc.createElement("link");
+				link.setAttribute("rel", "stylesheet");
+				link.setAttribute("href", cssAttachments[oid]);
+				doc.head.appendChild(link);
+				rm(st);
 			}
 		}
 
