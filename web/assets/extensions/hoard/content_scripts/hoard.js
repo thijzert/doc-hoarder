@@ -125,11 +125,10 @@
 
 		let doc_id = await fetch(BASE_URL + "api/capture-new-doc", new_doc)
 		doc_id = await doc_id.json();
-
-		console.log("doc_id:", doc_id.id, doc_id);
 		if ( !doc_id.id ) {
 			return { success: false, document_id: doc_id.id };
 		}
+		doc_id = doc_id.id;
 
 
 		// Add an implicit ID to inline stylesheets - we'll need it later
@@ -173,7 +172,7 @@
 
 			let att_id = {method: "POST", body: new FormData()}
 			att_id.body.append("api_key", API_KEY);
-			att_id.body.append("doc_id", doc_id.id);
+			att_id.body.append("doc_id", doc_id);
 
 			let url = new URL(image_url, location.href);
 			if ( url.origin !== location.origin ) {
@@ -216,7 +215,7 @@
 
 			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, blob, {
 				"api_key": API_KEY,
-				"doc_id": doc_id.id,
+				"doc_id": doc_id,
 				"att_id": att_id,
 			});
 
@@ -308,6 +307,7 @@
 		let cssAttachments = {};
 		let attachCSS = async (stylesheet) => {
 			const stylesheet_href = stylesheet.href;
+			let att_key = stylesheet_href;
 			let att_id = null, filename = null;
 
 			if ( !stylesheet_href ) {
@@ -315,54 +315,33 @@
 				if ( !("hoardStylesheet" in ownernode.dataset) ) {
 					return null;
 				}
-				if ( cssAttachments.hasOwnProperty(ownernode.dataset.hoardStylesheet) ) {
-					return cssAttachments[ownernode.dataset.hoardStylesheet];
-				}
-
-				try {
-					let inline_cnt = "";
-					for ( let rule of stylesheet.cssRules ) {
-						inline_cnt += await attachCSSRule(rule);
-					}
-					att_id = {method: "POST", body: new FormData()}
-					att_id.body.append("api_key", API_KEY);
-					att_id.body.append("doc_id", doc_id.id);
-					att_id.body.append("ext", "css");
-					att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
-					att_id = await att_id.json();
-					filename = att_id.filename;
-					att_id = att_id.attachment_id;
-					await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, inline_cnt, {
-						"api_key": API_KEY,
-						"doc_id": doc_id.id,
-						"att_id": att_id,
-					});
-
-					cssAttachments[ownernode.dataset.hoardStylesheet] = filename;
-				} catch ( _e ) { console.error(_e); }
-				return cssAttachments[ownernode.dataset.hoardStylesheet];
+				att_key = ownernode.dataset.hoardStylesheet;
 			}
 
-			if ( cssAttachments.hasOwnProperty(stylesheet_href) ) {
-				return cssAttachments[stylesheet_href];
+			if ( cssAttachments.hasOwnProperty(att_key) ) {
+				return cssAttachments[att_key];
 			}
-			console.log("Attaching CSS ", stylesheet_href);
+			console.log("Attaching CSS ", att_key);
 
-			let url = new URL(stylesheet_href, location.href);
-			if ( url.origin !== location.origin ) {
+			let url = {origin: false};
+			if ( stylesheet_href ) {
+				url = new URL(stylesheet_href, location.href);
+			}
+
+			if ( !!stylesheet_href && url.origin !== location.origin ) {
 				att_id = {method: "POST", body: new FormData()}
 				att_id.body.append("api_key", API_KEY);
-				att_id.body.append("doc_id", doc_id.id);
+				att_id.body.append("doc_id", doc_id);
 				att_id.body.append("url", stylesheet_href);
 				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
 				att_id = await att_id.json();
 				filename = att_id.filename;
 				att_id = att_id.attachment_id;
-				cssAttachments[stylesheet_href] = filename;
+				cssAttachments[att_key] = filename;
 
 				style_cnt = {method: "POST", body: new FormData()}
 				style_cnt.body.append("api_key", API_KEY);
-				style_cnt.body.append("doc_id", doc_id.id);
+				style_cnt.body.append("doc_id", doc_id);
 				style_cnt.body.append("att_id", att_id);
 				style_cnt = await fetch(BASE_URL + "api/download-attachment", style_cnt)
 				style_cnt = await style_cnt.blob();
@@ -372,13 +351,13 @@
 			} else {
 				att_id = {method: "POST", body: new FormData()}
 				att_id.body.append("api_key", API_KEY);
-				att_id.body.append("doc_id", doc_id.id);
+				att_id.body.append("doc_id", doc_id);
 				att_id.body.append("ext", "css");
 				att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
 				att_id = await att_id.json();
 				filename = att_id.filename;
 				att_id = att_id.attachment_id;
-				cssAttachments[stylesheet_href] = filename;
+				cssAttachments[att_key] = filename;
 			}
 
 
@@ -392,11 +371,11 @@
 
 			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, attcnt, {
 				"api_key": API_KEY,
-				"doc_id": doc_id.id,
+				"doc_id": doc_id,
 				"att_id": att_id,
 			});
 
-			return cssAttachments[stylesheet_href];
+			return cssAttachments[att_key];
 		}
 
 		for ( let stylesheet of document.styleSheets ) {
@@ -500,7 +479,7 @@
 
 		await uploadFile(BASE_URL + "api/upload-draft", "document", document.title + ".html", contents, {
 			"api_key": API_KEY,
-			"doc_id": doc_id.id,
+			"doc_id": doc_id,
 		});
 
 		if ( !icon_id ) {
@@ -515,7 +494,7 @@
 
 		let finalize = {method: "POST", body: new FormData()}
 		finalize.body.append("api_key", API_KEY);
-		finalize.body.append("doc_id", doc_id.id);
+		finalize.body.append("doc_id", doc_id);
 		finalize.body.append("doc_title", document.title);
 		finalize.body.append("doc_author", ""); // TODO
 		finalize.body.append("icon_id", icon_id);
@@ -527,8 +506,8 @@
 
 		return {
 			success: true,
-			document_id: doc_id.id,
-			full_url: (new URL("documents/view/g" + doc_id.id + "/", BASE_URL)).toString(),
+			document_id: doc_id,
+			full_url: (new URL("documents/view/g" + doc_id + "/", BASE_URL)).toString(),
 		};
 	}
 
