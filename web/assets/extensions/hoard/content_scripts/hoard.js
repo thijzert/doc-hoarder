@@ -130,6 +130,35 @@
 		}
 		doc_id = doc_id.id;
 
+		const postDoc = async (addr, data, as = "json") => {
+			let req = {method: "POST", body: new FormData()}
+			req.body.append("api_key", API_KEY);
+			req.body.append("doc_id", doc_id);
+			for ( let k in data ) {
+				if ( data.hasOwnProperty(k) ) {
+					req.body.append(k, data[k]);
+				}
+			}
+
+			let resp = await fetch(BASE_URL + addr, req)
+			if ( !resp.ok ) {
+				let err = await resp.json();
+				throw err;
+			}
+
+			if ( as === "json" ) {
+				return await resp.json();
+			} else if ( as === "blob" ) {
+				return await resp.blob();
+			} else if ( as === "text" ) {
+				// FIXME: maybe await resp.blob() and then await blob.text()?
+				return await resp.text();
+			} else {
+				console.error(`Invalid return type ${as}; returning text`);
+				return await resp.text();
+			}
+		};
+
 
 		// Add an implicit ID to inline stylesheets - we'll need it later
 		for ( let ss of document.styleSheets ) {
@@ -170,15 +199,11 @@
 			}
 			console.log("getting image url ", image_url);
 
-			let att_id = {method: "POST", body: new FormData()}
-			att_id.body.append("api_key", API_KEY);
-			att_id.body.append("doc_id", doc_id);
-
+			let att_id = null;
 			let url = new URL(image_url, location.href);
+
 			if ( url.origin !== location.origin ) {
-				att_id.body.append("url", url.toString());
-				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
-				att_id = await att_id.json();
+				att_id = await postDoc("api/proxy-attachment", {url: url.toString()});
 				if ( !att_id.filename ) {
 					console.error(att_id);
 				}
@@ -200,12 +225,7 @@
 				fileExt = "ico";
 			}
 
-			att_id.body.append("ext", fileExt);
-			att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
-			if ( !att_id.ok ) {
-				console.error(att_id);
-			}
-			att_id = await att_id.json();
+			att_id = await postDoc("api/new-attachment", {ext: fileExt});
 			if ( !att_id.attachment_id ) {
 				console.error(att_id);
 			}
@@ -329,32 +349,16 @@
 			}
 
 			if ( !!stylesheet_href && url.origin !== location.origin ) {
-				att_id = {method: "POST", body: new FormData()}
-				att_id.body.append("api_key", API_KEY);
-				att_id.body.append("doc_id", doc_id);
-				att_id.body.append("url", stylesheet_href);
-				att_id = await fetch(BASE_URL + "api/proxy-attachment", att_id)
-				att_id = await att_id.json();
+				att_id = await postDoc("api/proxy-attachment", {url: stylesheet_href});
 				filename = att_id.filename;
 				att_id = att_id.attachment_id;
 				cssAttachments[att_key] = filename;
 
-				style_cnt = {method: "POST", body: new FormData()}
-				style_cnt.body.append("api_key", API_KEY);
-				style_cnt.body.append("doc_id", doc_id);
-				style_cnt.body.append("att_id", att_id);
-				style_cnt = await fetch(BASE_URL + "api/download-attachment", style_cnt)
-				style_cnt = await style_cnt.blob();
-				style_cnt = await style_cnt.text();
+				style_cnt = await postDoc("api/download-attachment", {att_id: att_id}, "text");
 				stylesheet = new CSSStyleSheet();
 				stylesheet.replaceSync(style_cnt);
 			} else {
-				att_id = {method: "POST", body: new FormData()}
-				att_id.body.append("api_key", API_KEY);
-				att_id.body.append("doc_id", doc_id);
-				att_id.body.append("ext", "css");
-				att_id = await fetch(BASE_URL + "api/new-attachment", att_id)
-				att_id = await att_id.json();
+				att_id = await postDoc("api/new-attachment", {ext: "css"});
 				filename = att_id.filename;
 				att_id = att_id.attachment_id;
 				cssAttachments[att_key] = filename;
@@ -492,16 +496,12 @@
 			}
 		}
 
-		let finalize = {method: "POST", body: new FormData()}
-		finalize.body.append("api_key", API_KEY);
-		finalize.body.append("doc_id", doc_id);
-		finalize.body.append("doc_title", document.title);
-		finalize.body.append("doc_author", ""); // TODO
-		finalize.body.append("icon_id", icon_id);
-		finalize.body.append("log_message", "Saved page from web extension");
-		finalize = await fetch(BASE_URL + "api/finalize-draft", finalize);
-		if ( !finalize.ok ) { console.error(finalize); }
-		finalize = await finalize.json();
+		let finalize = await postDoc("api/finalize-draft", {
+			doc_title: document.title,
+			doc_author: "", // TODO
+			icon_id: icon_id,
+			log_message: "Saved page from web extension",
+		});
 		if ( !finalize.ok ) { console.error(finalize); }
 
 		return {
