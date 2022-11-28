@@ -567,12 +567,15 @@ func main() {
 
 		if (ct == "application/octet-stream" || ct == "binary/octet-stream") && len(proxy_url.Path) > 10 {
 			// HACK: the remote server doesn't report MIME types - infer from the file extension
-			if proxy_url.Path[len(proxy_url.Path)-5:] == ".woff" {
+			lp := len(proxy_url.Path)
+			if proxy_url.Path[lp-5:] == ".woff" {
 				ct = "font/woff"
-			} else if proxy_url.Path[len(proxy_url.Path)-6:] == ".woff2" {
+			} else if proxy_url.Path[lp-6:] == ".woff2" {
 				ct = "font/woff2"
-			} else if proxy_url.Path[len(proxy_url.Path)-4:] == ".eot" {
+			} else if proxy_url.Path[lp-4:] == ".eot" {
 				ct = "font/embedded-opentype"
+			} else if proxy_url.Path[lp-4:] == ".ttf" || proxy_url.Path[lp-4:] == ".otf" {
+				ct = "font/" + proxy_url.Path[lp-3:]
 			}
 		}
 

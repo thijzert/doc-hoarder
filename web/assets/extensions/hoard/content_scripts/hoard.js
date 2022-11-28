@@ -341,8 +341,8 @@
 							if ( s ) {
 								if ( s.slice(0,4) == "att/" ) { s = s.slice(4); }
 								fontFile = s;
+								replacement.push(`url("${fontFile}") ${format}`);
 							}
-							replacement.push(`url("${fontFile}") ${format}`);
 						} else if ( srcset.slice(0,6) == "local(" ) {
 							let localFont;
 							srcset = splitFirst(srcset, "(")[1].trim();
