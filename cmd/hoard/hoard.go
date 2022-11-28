@@ -423,7 +423,7 @@ func main() {
 		}
 
 		ext := strings.ToLower(r.FormValue("ext"))
-		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" && ext != "ico" {
+		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" && ext != "ico" && ext != "woff" && ext != "woff2" && ext != "eot" && ext != "ttf" { // TODO: this, but better
 			return nil, plumbing.BadRequest("Invalid extension '%s'", ext)
 		}
 
@@ -564,12 +564,24 @@ func main() {
 			return nil, err
 		}
 		ct := response.Header.Get("Content-Type")
+
+		if (ct == "application/octet-stream" || ct == "binary/octet-stream") && len(proxy_url.Path) > 10 {
+			// HACK: the remote server doesn't report MIME types - infer from the file extension
+			if proxy_url.Path[len(proxy_url.Path)-5:] == ".woff" {
+				ct = "font/woff"
+			} else if proxy_url.Path[len(proxy_url.Path)-6:] == ".woff2" {
+				ct = "font/woff2"
+			} else if proxy_url.Path[len(proxy_url.Path)-4:] == ".eot" {
+				ct = "font/embedded-opentype"
+			}
+		}
+
 		exts, err := mime.ExtensionsByType(ct)
 
 		if ct == "" || err != nil || len(exts) == 0 {
-			return nil, plumbing.BadRequest("unknown mime type")
+			return nil, plumbing.BadRequest("unknown mime type \"%s\"", ct)
 		}
-		if ct != "text/css" && !strstr(ct, "image/") && !strstr(ct, "text/css;") {
+		if ct != "text/css" && !strstr(ct, "image/") && !strstr(ct, "font/") && ct != "application/font-woff" && !strstr(ct, "text/css;") {
 			return nil, plumbing.BadRequest("subresource has invalid mime type '%s'", ct)
 		}
 
@@ -637,7 +649,7 @@ func main() {
 			defer f.Close()
 
 			t := mime.TypeByExtension(path.Ext(parts[5]))
-			if !(t == "text/css" || strstr(t, "image/") || strstr(t, "text/css;")) {
+			if !(t == "text/css" || strstr(t, "image/") || strstr(t, "font/") || strstr(t, "text/css;")) {
 				return nil, plumbing.Forbidden("disallowed type '%s'", t)
 			}
 			rv.ContentType = t
@@ -657,7 +669,7 @@ func main() {
 
 		rv.ContentType = "text/html; charset=utf-8"
 		rv.Header = make(http.Header)
-		rv.Header.Set("Content-Security-Policy", "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline' 'self'")
+		rv.Header.Set("Content-Security-Policy", "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline' 'self'; font-src 'self'")
 
 		rv.Contents, err = ioutil.ReadAll(f)
 		if err != nil {

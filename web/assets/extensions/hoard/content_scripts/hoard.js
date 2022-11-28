@@ -214,7 +214,7 @@
 			let blob = await fetch(url);
 			blob = await blob.blob();
 
-			if ( blob.type.substr(0,6) != "image/" ) {
+			if ( blob.type.substr(0,6) != "image/" && blob.type.substr(0,5) != "font/" ) {
 				throw "unknown mime type '" + blob.type + "'";
 			}
 
@@ -288,8 +288,8 @@
 				for ( let k of rule.style ) {
 					if ( k == "background-image" || k == "list-style-image" || k == "content" || k == "cursor" ) {
 						let m = rule.style[k].match(/^url\(\s*\"([^\"]+)\"\s*\)/)
-						console.log("attaching", m);
 						if ( m ) {
+							console.log("attaching", m);
 							resetStyle[k] = rule.style[k];
 							let s = await tryAttach(m[1]);
 							if ( s ) {
@@ -319,6 +319,49 @@
 					rv += "    " + await attachCSSRule(rr);
 				}
 				return rv + `}\n`;
+			} else if ( rule instanceof CSSFontFaceRule ) {
+				// HACK: there's no API-driven way to do this, but maybe there's something nicer than regexes
+				let rv = rule.cssText;
+				let m = rv.match(/src:\s*((url\(("([^\"]*)"|([^\)]))\)\s*format\(([^\)]*)\),?\s*|local\(\s*"[^\"]+"\s*\),?\s*)*)\s*(;|\})/);
+				if ( m ) {
+					let srcset = m[1];
+					// src: url(foo) format(bar), url(baz) format(qux)${m[6]}`;
+					let replacement = [];
+
+					while ( !!srcset && srcset.length > 0 ) {
+						if ( srcset.slice(0,4) == "url(" ) {
+							let fontFile, format;
+							srcset = splitFirst(srcset, "(")[1].trim();
+							srcset = splitFirst(srcset, "\"")[1];
+							[fontFile, srcset] = splitFirst(srcset, "\"");
+							srcset = splitFirst(srcset, ")")[1].trim();
+							[format, srcset] = splitFirst(srcset, ",");
+							srcset = srcset.trim();
+							let s = await tryAttach(fontFile);
+							if ( s ) {
+								if ( s.slice(0,4) == "att/" ) { s = s.slice(4); }
+								fontFile = s;
+							}
+							replacement.push(`url("${fontFile}") ${format}`);
+						} else if ( srcset.slice(0,6) == "local(" ) {
+							let localFont;
+							srcset = splitFirst(srcset, "(")[1].trim();
+							srcset = splitFirst(srcset, "\"")[1];
+							[localFont, srcset] = splitFirst(srcset, "\"");
+							srcset = splitFirst(srcset, ",")[1].trim();
+							replacement.push(`local("${localFont}")`);
+						} else {
+							let wtf;
+							[wtf, srcset] = splitFirst(srcset, ",");
+							console.error(`unknown font source type '${wtf}'`);
+							srcset = srcset.trim();
+						}
+					}
+					replacement = "src: " + replacement.join(", ") + m[7];
+
+					rv = rv.replace(m[0], replacement);
+				}
+				return rv + "\n";
 			} else {
 				return rule.cssText + "\n";
 			}
