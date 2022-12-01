@@ -120,12 +120,13 @@ type htmlHandler struct {
 }
 
 func (h htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	user, _ := login.GetUser(r)
 	tpData := TemplateData{
 		AppRoot:      appRoot(r),
 		AppVersion:   version,
 		TemplateName: path.Base(h.TemplateName),
 		Session:      sessions.GetSession(r),
-		User:         login.GetUser(r),
+		User:         user,
 	}
 
 	rootName := strings.SplitN(h.TemplateName, "/", 2)[0]

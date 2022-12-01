@@ -118,12 +118,39 @@ type loginKeyType int
 
 var loginKey loginKeyType = 2
 
-func GetUser(r *http.Request) *User {
+func GetUser(r *http.Request) (*User, bool) {
 	ctx := r.Context()
 	if s, ok := ctx.Value(loginKey).(*User); ok {
-		return s
+		return s, true
 	}
-	return &User{}
+	return &User{}, false
+}
+
+type no401Writer struct {
+	W     http.ResponseWriter
+	R     *http.Request
+	On401 func(http.ResponseWriter, *http.Request)
+}
+
+func (w no401Writer) Header() http.Header {
+	if w.W == nil {
+		return nil
+	}
+	return w.W.Header()
+}
+func (w no401Writer) Write(buf []byte) (int, error) {
+	if w.W == nil {
+		return 0, nil
+	}
+	return w.W.Write(buf)
+}
+func (w no401Writer) WriteHeader(status int) {
+	if status == 401 && w.On401 != nil {
+		w.On401(w.W, w.R)
+		w.W = nil
+	} else {
+		w.W.WriteHeader(status)
+	}
 }
 
 type oidcHandler struct {
@@ -136,6 +163,30 @@ type oidcHandler struct {
 func (o oidcHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	initiateLogin := func(w http.ResponseWriter, r *http.Request) {
+		stateValues := url.Values{}
+		stateValues.Set("ru", o.oidc.AppRoot+r.URL.Path)
+		state := stateValues.Encode()
+
+		mac := hmac.New(sha256.New, o.oidc.cookieKey)
+		mac.Write([]byte(state))
+		stateAuth := hex.EncodeToString(mac.Sum(nil))
+
+		lifetime := 20 * time.Minute
+		cookie := http.Cookie{
+			Name:     cookieName,
+			Value:    stateAuth,
+			Path:     "/",
+			Expires:  time.Now().Add(lifetime),
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteNoneMode,
+		}
+		w.Header().Add("Set-Cookie", cookie.String())
+
+		http.Redirect(w, r, o.oidc.oauth2Config.AuthCodeURL(state), 302)
+	}
+
 	sess := sessions.GetSession(r)
 	if sess == nil {
 		sess = &sessions.Session{}
@@ -147,30 +198,11 @@ func (o oidcHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if id == "" {
 		if o.loginRequired {
-			stateValues := url.Values{}
-			stateValues.Set("ru", o.oidc.AppRoot+r.URL.Path)
-			state := stateValues.Encode()
-
-			mac := hmac.New(sha256.New, o.oidc.cookieKey)
-			mac.Write([]byte(state))
-			stateAuth := hex.EncodeToString(mac.Sum(nil))
-
-			lifetime := 20 * time.Minute
-			cookie := http.Cookie{
-				Name:     cookieName,
-				Value:    stateAuth,
-				Path:     "/",
-				Expires:  time.Now().Add(lifetime),
-				Secure:   true,
-				HttpOnly: true,
-				SameSite: http.SameSiteNoneMode,
-			}
-			w.Header().Add("Set-Cookie", cookie.String())
-
-			http.Redirect(w, r, o.oidc.oauth2Config.AuthCodeURL(state), 302)
+			initiateLogin(w, r)
 			return
 		} else {
-			o.h.ServeHTTP(w, r)
+			ww := no401Writer{w, r, initiateLogin}
+			o.h.ServeHTTP(ww, r)
 		}
 		return
 	}

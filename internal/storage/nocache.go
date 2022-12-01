@@ -20,17 +20,33 @@ func (c noCache) GetDocuments(ctx context.Context, user_id string, limit Limit) 
 	}
 	rvids := make([]string, 0, limit.Limit)
 	rv := make([]DocumentMeta, 0, limit.Limit)
-	for i, docid := range docids {
-		if i < limit.Offset {
-			continue
-		}
-
+	found := 0
+	for _, docid := range docids {
 		trns, err := c.store.GetDocument(docid)
 		if err != nil {
 			return rvids, rv, err
 		}
 		meta, _ := ReadMeta(ctx, trns)
 		trns.Rollback()
+
+		canView := false
+		if meta.Permissions.Public {
+			canView = true
+		}
+		if user_id != "" {
+			if meta.Permissions.Owner == user_id {
+				canView = true
+			}
+			// TODO: apply ReadUsers/ReadGroups
+		}
+		if !canView {
+			continue
+		}
+
+		found++
+		if found <= limit.Offset {
+			continue
+		}
 
 		rvids = append(rvids, docid)
 		rv = append(rv, meta)

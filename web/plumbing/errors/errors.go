@@ -12,6 +12,16 @@ func (errUnauth) ErrorMessage() (string, string) {
 
 var ErrUnauthorised error = errUnauth{}
 
+type errLoginRequired struct{}
+
+func (errLoginRequired) Error() string   { return "login required" }
+func (errLoginRequired) StatusCode() int { return 401 }
+func (errLoginRequired) ErrorMessage() (string, string) {
+	return "unauthorized", "You must log in to view this resource"
+}
+
+var ErrLoginRequired error = errLoginRequired{}
+
 type err404 struct{}
 
 func (err404) Error() string   { return "not found" }

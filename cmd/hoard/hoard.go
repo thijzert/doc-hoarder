@@ -114,6 +114,11 @@ func main() {
 		h = sessions.WithSession(sessStore, h)
 		return h
 	}
+	mayLogin := func(h http.Handler) http.Handler {
+		h = lg.May(h)
+		h = sessions.WithSession(sessStore, h)
+		return h
+	}
 
 	shouldKey := login.MustHaveAPIKey(userStore)
 	mustKey := func(h http.Handler, scope string) http.Handler {
@@ -121,8 +126,8 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/", plumbing.LandingPageOnly(mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		user := login.GetUser(r)
+	mux.Handle("/", plumbing.LandingPageOnly(mayLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		user, _ := login.GetUser(r)
 		ids, metas, err := docCache.GetDocuments(r.Context(), string(user.ID), storage.Limit{0, 200})
 		if err != nil {
 			return nil, err
@@ -136,10 +141,7 @@ func main() {
 	mux.Handle("/auth/callback", sessions.WithSession(sessStore, lg.Callback()))
 
 	mux.Handle("/user/profile", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		user := login.GetUser(r)
-		if user == nil {
-			return nil, errors.New("nil user")
-		}
+		user, _ := login.GetUser(r)
 		allApikeys, err := userStore.GetAPIKeysForUser(r.Context(), user.ID)
 		if err != nil {
 			return nil, err
@@ -241,10 +243,7 @@ func main() {
 	}), "page/asset"))
 
 	mux.Handle("/api/user/new-api-key", mustLogin(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		user := login.GetUser(r)
-		if user == nil {
-			return nil, errors.New("nil user")
-		}
+		user, _ := login.GetUser(r)
 
 		scope := r.FormValue("scope")
 		if scope == "" {
@@ -261,10 +260,7 @@ func main() {
 		}{secret}, nil
 	}))))
 	mux.Handle("/api/user/disable-api-key", mustLogin(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		user := login.GetUser(r)
-		if user == nil {
-			return nil, errors.New("nil user")
-		}
+		user, _ := login.GetUser(r)
 
 		err := userStore.DisableAPIKey(r.Context(), user.ID, login.KeyID(r.FormValue("key_id")))
 		if err != nil {
@@ -277,10 +273,7 @@ func main() {
 	}))))
 
 	mux.Handle("/api/user/whoami", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		user := login.GetUser(r)
-		if user == nil {
-			return nil, errors.New("nil user")
-		}
+		user, _ := login.GetUser(r)
 		return struct {
 			Hello string `json:"hello"`
 		}{user.GivenName}, nil
@@ -299,7 +292,7 @@ func main() {
 			return nil, err
 		}
 
-		user := login.GetUser(r)
+		user, _ := login.GetUser(r)
 		txid := newTxid()
 
 		txmu.Lock()
@@ -319,8 +312,8 @@ func main() {
 		return res, nil
 	})), "document.create"))
 	mux.Handle("/api/capture-new-doc", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		user := login.GetUser(r)
-		if user == nil {
+		user, ok := login.GetUser(r)
+		if !ok {
 			return nil, errors.New("nil user")
 		}
 		page_url := r.FormValue("page_url")
@@ -621,7 +614,7 @@ func main() {
 		return res, nil
 	}))
 
-	mux.Handle("/documents/view/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+	mux.Handle("/documents/view/", mayLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		var docid int64
 		parts := strings.Split(r.URL.Path, "/")
 		if len(parts) <= 3 {
@@ -640,6 +633,24 @@ func main() {
 		trns, err := docStore.GetDocument(fmt.Sprintf("%10x", docid))
 		if err != nil {
 			return nil, err
+		}
+
+		user, userOk := login.GetUser(r)
+		meta, err := storage.ReadMeta(r.Context(), trns)
+		if err != nil {
+			return nil, err
+		}
+
+		if !meta.Permissions.Public {
+			if !userOk {
+				return nil, weberrors.ErrLoginRequired
+			}
+			if string(user.ID) == meta.Permissions.Owner {
+				// This is fine
+			} else {
+				// TODO: check read permissions
+				return nil, weberrors.Forbidden("You do not have permission to view this document")
+			}
 		}
 
 		rv := plumbing.Blob{}
@@ -680,7 +691,7 @@ func main() {
 		}
 
 		return rv, nil
-	}), "page/asset"))
+	}), "page/asset")))
 
 	listenAddr := "localhost:2690"
 	log.Printf("Listening on %s", listenAddr)
