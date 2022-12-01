@@ -115,25 +115,12 @@
 		} while ( idx < contents.size );
 	}
 
-	const flatten = async (apikey) => {
+	const flatten = async (txid, doc_id) => {
 		const BASE_URL = "https://xxxxxxxxxxxxxxxxxxxxxxxx";
-		const API_KEY = apikey;
-
-		let new_doc = {method: "POST", body: new FormData()}
-		new_doc.body.append("api_key", API_KEY);
-		new_doc.body.append("page_url", location.href);
-
-		let doc_id = await fetch(BASE_URL + "api/capture-new-doc", new_doc)
-		doc_id = await doc_id.json();
-		if ( !doc_id.id ) {
-			return { success: false, document_id: doc_id.id };
-		}
-		doc_id = doc_id.id;
 
 		const postDoc = async (addr, data, as = "json") => {
 			let req = {method: "POST", body: new FormData()}
-			req.body.append("api_key", API_KEY);
-			req.body.append("doc_id", doc_id);
+			req.body.append("txid", txid);
 			for ( let k in data ) {
 				if ( data.hasOwnProperty(k) ) {
 					req.body.append(k, data[k]);
@@ -234,8 +221,7 @@
 			imageAttachments[image_url] = filename;
 
 			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, blob, {
-				"api_key": API_KEY,
-				"doc_id": doc_id,
+				"txid": txid,
 				"att_id": att_id,
 			});
 
@@ -372,6 +358,7 @@
 			const stylesheet_href = stylesheet.href;
 			let att_key = stylesheet_href;
 			let att_id = null, filename = null;
+			let url = {origin: false};
 
 			if ( !stylesheet_href ) {
 				let ownernode = stylesheet.ownerNode;
@@ -379,17 +366,15 @@
 					return null;
 				}
 				att_key = ownernode.dataset.hoardStylesheet;
+			} else {
+				url = new URL(stylesheet_href, location.href);
+				att_key = url.toString();
 			}
 
 			if ( cssAttachments.hasOwnProperty(att_key) ) {
 				return cssAttachments[att_key];
 			}
 			console.log("Attaching CSS ", att_key);
-
-			let url = {origin: false};
-			if ( stylesheet_href ) {
-				url = new URL(stylesheet_href, location.href);
-			}
 
 			if ( !!stylesheet_href && url.origin !== location.origin ) {
 				att_id = await postDoc("api/proxy-attachment", {url: stylesheet_href});
@@ -417,8 +402,7 @@
 			} catch ( _e ) { console.error(_e); }
 
 			await uploadFile(BASE_URL + "api/upload-attachment", "attachment", filename, attcnt, {
-				"api_key": API_KEY,
-				"doc_id": doc_id,
+				"txid": txid,
 				"att_id": att_id,
 			});
 
@@ -431,7 +415,7 @@
 
 		for ( let link of doc.querySelectorAll("link") ) {
 			if ( link.rel == "stylesheet" ) {
-				let href = link.href.toString();
+				let href = (new URL(link.href, location.href)).toString();
 				if ( cssAttachments.hasOwnProperty(href) ) {
 					link.href = cssAttachments[href];
 				} else {
@@ -476,7 +460,7 @@
 				rm(meta);
 			} else if ( heqv == "origin-trial" || mname == "robots" ) {
 				rm(meta);
-			} else if ( mname == "icon" || mname == "apple-touch-icon" || mname == "shortcut icon" || /^msapplication-/.test(mname) || /:image/.test(mname) || /:image/.test(prop) ) {
+			} else if ( mname == "icon" || mname == "apple-touch-icon" || mname == "shortcut icon" || /^msapplication-/.test(mname) || /:image$/.test(mname) || /:image$/.test(prop) ) {
 				let img = await tryAttach(meta.content);
 				if ( img ) {
 					meta.content = img;
@@ -517,7 +501,8 @@
 			}
 			if ( window.getComputedStyle(elt).getPropertyValue("display") == "none" ) {
 				// console.log("maybe remove this one?", elt)
-				rm(elt);
+				//rm(elt);
+				elt.style.display = "none";
 			}
 		}
 
@@ -525,7 +510,7 @@
 
 
 		await uploadFile(BASE_URL + "api/upload-draft", "document", document.title + ".html", contents, {
-			"api_key": API_KEY,
+			"txid": txid,
 			"doc_id": doc_id,
 		});
 
@@ -559,7 +544,7 @@
 	browser.runtime.onMessage.addListener(async (message) => {
 		console.log("Got message", message);
 		if (message.command === "flatten") {
-			return await flatten(message.apikey);
+			return await flatten(message.txid, message.doc_id);
 		}
 	});
 

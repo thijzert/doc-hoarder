@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/thijzert/doc-hoarder/internal/storage"
@@ -284,16 +286,35 @@ func main() {
 		}{user.GivenName}, nil
 	})), ""))
 
+	var txmu sync.Mutex
+	transactions := make(map[string]cachedTx)
+
 	mux.Handle("/api/new-doc", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		docid, err := docStore.NewDocumentID(r.Context())
 		if err != nil {
 			return nil, err
 		}
+		trns, err := docStore.GetDocument(docid)
+		if err != nil {
+			return nil, err
+		}
+
+		user := login.GetUser(r)
+		txid := newTxid()
+
+		txmu.Lock()
+		transactions[txid] = cachedTx{
+			Tx:   trns,
+			User: user,
+		}
+		txmu.Unlock()
 
 		res := struct {
-			ID string `json:"id"`
+			ID   string `json:"id"`
+			Txid string `json:"txid"`
 		}{
-			ID: docid,
+			ID:   docid,
+			Txid: txid,
 		}
 		return res, nil
 	})), "document.create"))
@@ -334,54 +355,51 @@ func main() {
 			return nil, err
 		}
 
+		txid := newTxid()
+
+		txmu.Lock()
+		transactions[txid] = cachedTx{
+			Tx:   trns,
+			User: user,
+		}
+		txmu.Unlock()
+
 		res := struct {
-			ID string `json:"id"`
+			ID   string `json:"id"`
+			Txid string `json:"txid"`
 		}{
-			ID: docid,
+			ID:   docid,
+			Txid: txid,
 		}
 		return res, nil
 	})), "document.create"))
 
-	draftAPI := func(r *http.Request) (storage.DocTransaction, error) {
-		user := login.GetUser(r)
-		if user == nil {
-			return nil, errors.New("nil user")
-		}
+	const txidParamname string = "txid"
+	mustDraft := func(f func(r *http.Request, trns storage.DocTransaction) (interface{}, error)) http.Handler {
+		return plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+			txid := r.FormValue(txidParamname)
+			if len(txid) < 10 {
+				return nil, weberrors.BadRequest("invalid draft ID")
+			}
 
-		draft_id := strings.ToLower(r.FormValue("doc_id"))
-		_, err := hex.DecodeString(draft_id)
-		if err != nil || len(draft_id) != 10 {
-			return nil, weberrors.BadRequest("invalid draft ID")
-		}
+			txmu.Lock()
+			trns, ok := transactions[txid]
+			txmu.Unlock()
+			if !ok {
+				return nil, weberrors.BadRequest("invalid draft ID")
+			}
 
-		// meta, err := cache.GetDocumentMeta(draft_id)
+			// meta, err := cache.GetDocumentMeta(draft_id)
 
-		trns, err := docStore.GetDocument(draft_id)
-		if err != nil {
-			return nil, err
-		}
-		meta, err := storage.ReadMeta(r.Context(), trns)
-		if err != nil {
-			return nil, err
-		}
+			trns.Mu.Lock() // FIXME: is this necessary, really?
+			rv, err := f(r, trns.Tx)
+			trns.Mu.Unlock()
 
-		if login.UserID(meta.Permissions.Owner) != user.ID {
-			// TODO: check WriteUsers and WriteGroups
-			return nil, weberrors.Forbidden("you do not have permission to write this document")
-		}
-		if meta.Status != storage.StatusDraft {
-			return nil, weberrors.Forbidden("this document does not have draft status")
-		}
-
-		return trns, nil
+			return rv, err
+		}))
 	}
 
-	mux.Handle("/api/finalize-draft", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		trns, err := draftAPI(r)
-		if err != nil {
-			return nil, err
-		}
-
+	mux.Handle("/api/finalize-draft", mustDraft(func(r *http.Request, trns storage.DocTransaction) (interface{}, error) {
 		meta, err := storage.ReadMeta(r.Context(), trns)
 		if err != nil {
 			return nil, err
@@ -413,15 +431,17 @@ func main() {
 		if err != nil {
 			return nil, err
 		}
+
+		// FIXME: figure out an elegant way of having mustDraft() delete the transaction from the cache. Right now the only reaon this doesn't delete arbitrary transactions is that the parameter name happens to be the same in both functions.
+		txid := r.FormValue(txidParamname)
+		txmu.Lock()
+		delete(transactions, txid)
+		txmu.Unlock()
+
 		return okay("Document saved")
-	})), "document.create"))
+	}))
 
-	mux.Handle("/api/new-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		trns, err := draftAPI(r)
-		if err != nil {
-			return nil, err
-		}
-
+	mux.Handle("/api/new-attachment", mustDraft(func(r *http.Request, trns storage.DocTransaction) (interface{}, error) {
 		ext := strings.ToLower(r.FormValue("ext"))
 		if ext != "css" && ext != "svg" && ext != "png" && ext != "jpeg" && ext != "ico" && ext != "woff" && ext != "woff2" && ext != "eot" && ext != "ttf" { // TODO: this, but better
 			return nil, plumbing.BadRequest("Invalid extension '%s'", ext)
@@ -441,14 +461,9 @@ func main() {
 			Filename: "att/" + attName,
 		}
 		return res, nil
-	})), "document.create"))
+	}))
 
-	mux.Handle("/api/upload-draft", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		trns, err := draftAPI(r)
-		if err != nil {
-			return nil, err
-		}
-
+	mux.Handle("/api/upload-draft", mustDraft(func(r *http.Request, trns storage.DocTransaction) (interface{}, error) {
 		f, _, err := r.FormFile("document")
 		if err != nil {
 			return nil, err
@@ -466,13 +481,8 @@ func main() {
 		}
 
 		return okay("Chunk uploaded successfully")
-	})), "document.create"))
-	mux.Handle("/api/upload-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		trns, err := draftAPI(r)
-		if err != nil {
-			return nil, err
-		}
-
+	}))
+	mux.Handle("/api/upload-attachment", mustDraft(func(r *http.Request, trns storage.DocTransaction) (interface{}, error) {
 		att_id := strings.ToLower(r.FormValue("att_id"))
 		attName, err := storage.AttachmentNameFromID(r.Context(), trns, att_id)
 		if err != nil {
@@ -512,13 +522,8 @@ func main() {
 		}
 
 		return okay("Chunk uploaded successfully")
-	})), "document.create"))
-	mux.Handle("/api/download-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		trns, err := draftAPI(r)
-		if err != nil {
-			return nil, err
-		}
-
+	}))
+	mux.Handle("/api/download-attachment", mustDraft(func(r *http.Request, trns storage.DocTransaction) (interface{}, error) {
 		att_id := strings.ToLower(r.FormValue("att_id"))
 		attName, err := storage.AttachmentNameFromID(r.Context(), trns, att_id)
 		if err != nil {
@@ -543,13 +548,8 @@ func main() {
 			rv.ContentType = t
 		}
 		return rv, nil
-	})), "document.create"))
-	mux.Handle("/api/proxy-attachment", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
-		trns, err := draftAPI(r)
-		if err != nil {
-			return nil, err
-		}
-
+	}))
+	mux.Handle("/api/proxy-attachment", mustDraft(func(r *http.Request, trns storage.DocTransaction) (interface{}, error) {
 		// TODO: proxy URL
 		proxy_url, err := url.Parse(r.FormValue("url"))
 		if err != nil || r.FormValue("url") == "" || (proxy_url.Scheme != "https" && proxy_url.Scheme != "http") {
@@ -619,7 +619,7 @@ func main() {
 			Filename: "att/" + attName,
 		}
 		return res, nil
-	})), "document.create"))
+	}))
 
 	mux.Handle("/documents/view/", plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		var docid int64
@@ -708,4 +708,16 @@ func okay(format string, a ...interface{}) (okayStruc, error) {
 		OK:      true,
 		Message: fmt.Sprintf(format, a...),
 	}, nil
+}
+
+func newTxid() string {
+	buf := make([]byte, 32)
+	rand.Read(buf)
+	return hex.EncodeToString(buf)
+}
+
+type cachedTx struct {
+	Mu   sync.Mutex
+	Tx   storage.DocTransaction
+	User *login.User
 }

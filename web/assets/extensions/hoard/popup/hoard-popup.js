@@ -39,6 +39,8 @@ const logMessage = (msg, ...classes) => {
  * the content script in the page.
  */
 const listenForClicks = () => {
+	const BASE_URL = "https://xxxxxxxxxxxxxxxxxxxxxxxx";
+
 	let apikeyInput = document.querySelector("#settings #apikey") || document.createElement("input");
 	let currentAPIKey = apikeyInput.value;
 	let apikeyStatus = document.querySelector("#settings #apikey-status") || document.createElement("div");
@@ -52,8 +54,6 @@ const listenForClicks = () => {
 		apikeyStatus.innerText = "…";
 
 		try {
-			const BASE_URL = "https://xxxxxxxxxxxxxxxxxxxxxxxx";
-
 			let form = new FormData();
 			form.append("api_key", apikeyInput.value);
 			await browser.storage.sync.set({"hoard-api-key": apikeyInput.value});
@@ -78,9 +78,21 @@ const listenForClicks = () => {
 	document.addEventListener("click", async (e) => {
 
 		const flatten = async (tabs) => {
+			let txid_post = {method: "POST", body: new FormData()};
+			txid_post.body.append("api_key", apikeyInput.value);
+			txid_post.body.append("page_url", tabs[0].url);
+
+			let txid = await fetch(BASE_URL + "api/capture-new-doc", txid_post);
+			txid = await txid.json();
+			if ( !txid.id ) {
+				logMessage("OOK" + JSON.stringify(txid), "error");
+				return;
+			}
+
 			let rv = await browser.tabs.sendMessage(tabs[0].id, {
 				command: "flatten",
-				apikey: apikeyInput.value
+				doc_id: txid.id,
+				txid: txid.txid,
 			});
 
 			if ( rv ) {
