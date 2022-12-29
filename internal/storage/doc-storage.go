@@ -73,6 +73,8 @@ type ExtensionKnower interface {
 	AttachmentNameFromID(context.Context, string) (string, error)
 }
 
+var knownExtensions []string = []string{"css", "svg", "png", "jpeg", "ico", "woff", "woff2", "eot", "ttf"}
+
 func AttachmentNameFromID(ctx context.Context, trns DocTransaction, att_id string) (string, error) {
 	if ek, ok := trns.(ExtensionKnower); ok {
 		return ek.AttachmentNameFromID(ctx, att_id)
@@ -80,7 +82,7 @@ func AttachmentNameFromID(ctx context.Context, trns DocTransaction, att_id strin
 
 	var f io.ReadCloser
 	var err error
-	for _, e := range []string{"css", "svg", "png", "jpeg", "ico", "woff", "woff2", "eot", "ttf"} {
+	for _, e := range knownExtensions {
 		attName := "t" + att_id + "." + e
 		f, err = trns.ReadAttachment(ctx, attName)
 		if err == nil {
@@ -89,6 +91,52 @@ func AttachmentNameFromID(ctx context.Context, trns DocTransaction, att_id strin
 		}
 	}
 	return "", err
+}
+
+type DirectFileAccesser interface {
+	GetRootFile(context.Context, string, string) (io.ReadCloser, error)
+	GetAttachment(context.Context, string, string) (io.ReadCloser, error)
+}
+
+func GetRootFile(ctx context.Context, st DocStore, doc_id, name string) (io.ReadCloser, error) {
+	if dfa, ok := st.(DirectFileAccesser); ok {
+		return dfa.GetRootFile(ctx, doc_id, name)
+	}
+
+	trns, err := st.GetDocument(doc_id)
+	if err != nil {
+		return nil, err
+	}
+	defer trns.Rollback()
+
+	f, err := trns.ReadRootFile(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
+func GetAttachment(ctx context.Context, st DocStore, doc_id, att_id string) (io.ReadCloser, error) {
+	if dfa, ok := st.(DirectFileAccesser); ok {
+		return dfa.GetAttachment(ctx, doc_id, att_id)
+	}
+
+	trns, err := st.GetDocument(doc_id)
+	if err != nil {
+		return nil, err
+	}
+	defer trns.Rollback()
+
+	var f io.ReadCloser
+	for _, e := range knownExtensions {
+		attName := "t" + att_id + "." + e
+		f, err = trns.ReadAttachment(ctx, attName)
+		if err == nil {
+			return f, nil
+		}
+	}
+	return nil, err
 }
 
 type Limit struct {
