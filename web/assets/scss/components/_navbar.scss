@@ -26,6 +26,26 @@ nav.main-nav {
 			}
 		}
 	}
+
+	#nav-smoel {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+
+		.-avatar {
+			> svg {
+				width: 2rem;
+				height: 2rem;
+				border-radius: 1rem;
+
+				@include bgcol(inactive-back);
+				use {
+					@include col(fill, inactive-text);
+				}
+			}
+			padding-left: .75rem;
+		}
+	}
 }
 
 footer.powered-by {
