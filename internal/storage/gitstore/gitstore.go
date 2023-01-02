@@ -2,41 +2,39 @@ package gitstore
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
+	"path"
 
 	"github.com/go-git/go-billy/v5/memfs"
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	gitpl "github.com/go-git/go-git/v5/plumbing"
+	gitst "github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/pkg/errors"
+	"github.com/thijzert/doc-hoarder/internal/storage"
+)
+
+const (
+	mainBranch string = "main"
 )
 
 func init() {
-	ctx := context.Background()
-	r := &repo{
-		path: "/tmp/test.git",
-	}
-	log.Print(r.Init(ctx))
-	f, err := r.getFileFromBranch(ctx, "main", "README.md")
-	if err != nil {
-		log.Printf("failed to get readme: %v", err)
-	} else {
-		cts, _ := io.ReadAll(f)
-		f.Close()
-		log.Print(cts)
-	}
+	storage.RegisterStorageMethod("git", func(rootPath string) (storage.DocStore, error) {
+		r := &repo{
+			path: rootPath,
+		}
 
-	f, err = r.getFileFromBranch(ctx, "develop", "README.md")
-	if err != nil {
-		log.Printf("failed to get readme: %v %v", err, errors.Is(err, fs.ErrNotExist))
-	} else {
-		cts, _ := io.ReadAll(f)
-		f.Close()
-		log.Print(cts)
-	}
+		ctx := context.Background() //FIXME
+		err := r.Init(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return r, nil
+	})
 }
 
 type repo struct {
@@ -51,8 +49,6 @@ func (g *repo) Init(ctx context.Context) error {
 
 	var err error
 	g.repository, err = git.PlainOpen(g.path)
-
-	mainBranch := "main"
 
 	if err == nil {
 		return nil
@@ -196,27 +192,239 @@ func (g *repo) getFileFromBranch(ctx context.Context, branch, filename string) (
 }
 
 // DocumentIDs lists all IDs for documents in this store
-//func (g *repo) DocumentIDs(context.Context) ([]string, error)
+func (g *repo) DocumentIDs(ctx context.Context) ([]string, error) {
+	branches, err := g.repository.Branches()
+	if err != nil {
+		return nil, err
+	}
+	defer branches.Close()
 
-// NewDocumentID generates a new document ID that is not yet present in this store
-//func (g *repo) NewDocumentID(context.Context) (string, error)
+	rv := []string{}
+	err = branches.ForEach(func(ref *gitpl.Reference) error {
+		if ctx.Err() != nil {
+			return gitst.ErrStop
+		}
+		name := string(ref.Name())
+		log.Printf("got branch: %v", name)
+		if len(name) != 22 {
+			return nil
+		}
 
-// GetDocument starts a transaction for a document ID
-//func (g *repo) GetDocument(string) (DocTransaction, error)
-
-type transaction struct {
-	repo repo
+		var id uint64
+		if _, err := fmt.Sscanf(name, "refs/heads/g%010x", &id); err != nil {
+			return nil
+		}
+		rv = append(rv, name[12:])
+		return nil
+	})
+	return rv, err
 }
 
-//func (t *transaction) DocumentID() string
+// NewDocumentID generates a new document ID that is not yet present in this store
+func (g *repo) NewDocumentID(ctx context.Context) (string, error) {
+	rv := ""
+	tries := 10
+	for ctx.Err() == nil {
+		tries--
+		if tries < 0 {
+			return "", errors.New("failed to generate a document ID")
+		}
+		rv = storage.NewDocumentID()
+		_, err := g.repository.Reference(gitpl.NewBranchReferenceName("g"+rv), false)
+		if err != nil {
+			if errors.Is(err, gitpl.ErrReferenceNotFound) {
+				break
+			}
+			return "", err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 
-//func (t *transaction) ReadRootFile(context.Context, string) (io.ReadCloser, error)
-//func (t *transaction) WriteRootFile(context.Context, string) (io.WriteCloser, error)
+	err := g.repository.CreateBranch(&config.Branch{Name: "g" + rv})
+	return rv, err
+}
 
-//func (t *transaction) ListAttachments(context.Context) ([]string, error)
-//func (t *transaction) ReadAttachment(context.Context, string) (io.ReadCloser, error)
-//func (t *transaction) NewAttachmentID(context.Context, string) (string, error)
-//func (t *transaction) WriteAttachment(context.Context, string) (io.WriteCloser, error)
+// GetDocument starts a transaction for a document ID
+func (g *repo) GetDocument(id string) (storage.DocTransaction, error) {
+	ctx := context.Background()
+	cl, err := git.CloneContext(ctx, memory.NewStorage(), memfs.New(), &git.CloneOptions{
+		URL: g.path,
+	})
+	if err != nil {
+		return nil, err
+	}
 
-//func (t *transaction) Commit(context.Context, string) error
-//func (t *transaction) Rollback() error
+	brref := gitpl.NewBranchReferenceName("g" + id)
+	b, err := g.repository.Reference(brref, false)
+	if errors.Is(err, gitpl.ErrReferenceNotFound) {
+		b, err = g.repository.Reference(gitpl.NewBranchReferenceName(mainBranch), false)
+	}
+	if err != nil {
+		log.Printf("cannot get id: %v", err)
+		return nil, err
+	}
+
+	wt, err := cl.Worktree()
+	if err != nil {
+		log.Printf("cannot get worktree: %v", err)
+		return nil, err
+	}
+
+	gco := &git.CheckoutOptions{
+		Branch: brref,
+		Create: true,
+		Hash:   b.Hash(),
+	}
+	err = wt.Checkout(gco)
+	if err != nil {
+		log.Printf("cannot switch branches: %v (b %v)", err, b)
+		return nil, err
+	}
+
+	return &transaction{
+		repo:  g,
+		clone: cl,
+		dir:   "g" + id,
+	}, nil
+}
+
+type transaction struct {
+	repo  *repo
+	clone *git.Repository
+	dir   string
+}
+
+func (t *transaction) DocumentID() string {
+	return t.dir[1:]
+}
+
+func (t *transaction) ReadRootFile(ctx context.Context, name string) (io.ReadCloser, error) {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	return wt.Filesystem.Open(path.Join(t.dir, name))
+}
+func (t *transaction) WriteRootFile(ctx context.Context, name string) (io.WriteCloser, error) {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return nil, err
+	}
+
+	filename := path.Join(t.dir, name)
+	rv, err := wt.Filesystem.Create(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	h, err := wt.Add(filename)
+	log.Printf("Add %s - %v %s", filename, err, h)
+
+	return rv, nil
+}
+
+func (t *transaction) ListAttachments(context.Context) ([]string, error) {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	fileInfos, err := wt.Filesystem.ReadDir(path.Join(t.dir, "att"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+
+	rv := []string{}
+	for _, fi := range fileInfos {
+		n := fi.Name()
+		if fi.IsDir() || len(n) < 12 || n[0] != 't' || n[11] != '.' {
+			continue
+		}
+
+		var id int64
+		var ext string
+		if _, err := fmt.Sscanf(n, "t%010x.%s", &id, &ext); err != nil {
+			continue
+		}
+		rv = append(rv, n[1:11])
+	}
+
+	return rv, nil
+}
+func (t *transaction) ReadAttachment(ctx context.Context, name string) (io.ReadCloser, error) {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	return wt.Filesystem.Open(path.Join(t.dir, "att", name))
+}
+func (t *transaction) NewAttachmentID(ctx context.Context, ext string) (string, error) {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return "", err
+	}
+	wt.Filesystem.MkdirAll(path.Join(t.dir, "att"), 0755)
+
+	var rv string
+	for ctx.Err() == nil {
+		rv = storage.NewDocumentID()
+		fp := path.Join(t.dir, "att", "t"+rv+"."+ext)
+		_, err := wt.Filesystem.Stat(fp)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				g, err := wt.Filesystem.Create(fp)
+				if err == nil {
+					g.Close()
+					wt.Add(fp)
+					return rv, nil
+				}
+			} else {
+				return "", err
+			}
+		}
+	}
+	return "", ctx.Err()
+}
+func (t *transaction) WriteAttachment(ctx context.Context, name string) (io.WriteCloser, error) {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	wt.Filesystem.MkdirAll(path.Join(t.dir, "att"), 0755)
+	fp := path.Join(t.dir, "att", name)
+	rv, err := wt.Filesystem.Create(fp)
+	wt.Add(fp)
+	return rv, err
+}
+
+func (t *transaction) Commit(ctx context.Context, logMessage string) error {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return err
+	}
+
+	st, er := wt.Status()
+	log.Printf("git status: %v %v", st, er)
+
+	opts := git.CommitOptions{
+		All: true,
+	}
+	_, err = wt.Commit(logMessage, &opts)
+	if err != nil {
+		return err
+	}
+
+	ref := gitpl.NewBranchReferenceName(t.dir)
+	push := git.PushOptions{
+		RemoteName: "origin",
+		RefSpecs: []config.RefSpec{
+			config.RefSpec(string(ref) + ":" + string(ref)),
+		},
+	}
+	return t.clone.PushContext(ctx, &push)
+}
+func (t *transaction) Rollback() error {
+	t.clone = nil
+	return nil
+}

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/thijzert/doc-hoarder/internal/storage"
+	_ "github.com/thijzert/doc-hoarder/internal/storage/gitstore"
 	"github.com/thijzert/doc-hoarder/web/plumbing"
 	weberrors "github.com/thijzert/doc-hoarder/web/plumbing/errors"
 	"github.com/thijzert/doc-hoarder/web/plumbing/login"
