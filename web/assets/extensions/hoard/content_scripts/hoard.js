@@ -200,16 +200,19 @@
 
 			let blob = await fetch(url);
 			blob = await blob.blob();
+			let fileExt = blob.type;
 
-			if ( blob.type.substr(0,6) != "image/" && blob.type.substr(0,5) != "font/" ) {
+			if ( blob.type.substr(0,6) == "image/" ) {
+				fileExt = blob.type.substr(6);
+				if ( fileExt == "svg+xml" ) {
+					fileExt = "svg";
+				} else if ( fileExt == "vnd.microsoft.icon" ) {
+					fileExt = "ico";
+				}
+			} else if ( blob.type.substr(0,5) == "font/" ) {
+				fileExt = blob.type.substr(5);
+			} else {
 				throw "unknown mime type '" + blob.type + "'";
-			}
-
-			let fileExt = blob.type.substr(6);
-			if ( fileExt == "svg+xml" ) {
-				fileExt = "svg";
-			} else if ( fileExt == "vnd.microsoft.icon" ) {
-				fileExt = "ico";
 			}
 
 			att_id = await postDoc("api/new-attachment", {ext: fileExt});
