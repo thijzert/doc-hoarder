@@ -20,17 +20,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var TODOREMOVELATER Store
-
 const cookieName string = "oidc-auth"
-
-func init() {
-	var err error
-	TODOREMOVELATER, err = GetUserStore("")
-	if err != nil {
-		panic(err)
-	}
-}
 
 type OIDC struct {
 	URL          string
