@@ -25,6 +25,7 @@
 		<dialog id="profile-menu">
 			<ul class="link-panel">
 				<li>{{if .User}}{{.User.FullName}}{{else}}Not logged in{{end}}</li>
+				{{if .User}}{{else}}<li><a href="login">Log in</a></li>{{end}}
 				{{if .User}}<li><a href="user/profile">View profile</a></li>{{end}}
 				{{if .User}}<li><a href="logout">Log out</a></li>{{end}}
 			</ul>

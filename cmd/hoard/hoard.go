@@ -140,6 +140,9 @@ func main() {
 	}), "page/home"))))
 	mux.Handle("/auth/callback", sessions.WithSession(sessStore, lg.Callback()))
 
+	mux.Handle("/login", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		return nil, plumbing.Redirect(302, ".")
+	}), "page/home")))
 	mux.Handle("/user/profile", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		user, _ := login.GetUser(r)
 		allApikeys, err := userStore.GetAPIKeysForUser(r.Context(), user.ID)
