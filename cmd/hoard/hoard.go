@@ -143,6 +143,15 @@ func main() {
 	mux.Handle("/login", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		return nil, plumbing.Redirect(302, ".")
 	}), "page/home")))
+	mux.Handle("/logout", mayLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
+		sess := sessions.GetSession(r)
+		if sess != nil {
+			sess.LoggedInAs = ""
+			sess.Destroyed = true
+			sess.Dirty = true
+		}
+		return nil, plumbing.Redirect(302, ".")
+	}), "page/home")))
 	mux.Handle("/user/profile", mustLogin(plumbing.AsHTML(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		user, _ := login.GetUser(r)
 		allApikeys, err := userStore.GetAPIKeysForUser(r.Context(), user.ID)

@@ -19,10 +19,11 @@ func NewSessionID() SessionID {
 }
 
 type Session struct {
-	ID       SessionID
-	Dirty    bool `json:"-",xml:"-"`
-	Started  time.Time
-	LastSeen time.Time
+	ID        SessionID
+	Dirty     bool `json:"-",xml:"-"`
+	Started   time.Time
+	LastSeen  time.Time
+	Destroyed bool `json:"destroyed,omitEmpty"`
 
 	LoggedInAs string
 

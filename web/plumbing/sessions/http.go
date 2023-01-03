@@ -38,7 +38,7 @@ func (sh sessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	sess, err := sh.store.GetSession(ctx, id)
-	if err == ErrNotPresent {
+	if err == ErrNotPresent || sess.Destroyed {
 		sess, err = sh.store.NewSession(ctx)
 		id = sess.ID
 	}
