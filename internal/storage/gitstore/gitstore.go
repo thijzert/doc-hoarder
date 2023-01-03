@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"path"
 
 	"github.com/go-git/go-billy/v5/memfs"
@@ -205,7 +204,6 @@ func (g *repo) DocumentIDs(ctx context.Context) ([]string, error) {
 			return gitst.ErrStop
 		}
 		name := string(ref.Name())
-		log.Printf("got branch: %v", name)
 		if len(name) != 22 {
 			return nil
 		}
@@ -262,14 +260,12 @@ func (g *repo) GetDocument(id string) (storage.DocTransaction, error) {
 		b, err = g.repository.Reference(gitpl.NewBranchReferenceName(mainBranch), false)
 	}
 	if err != nil {
-		log.Printf("cannot get id: %v", err)
-		return nil, err
+		return nil, errors.Wrap(err, "cannot get id")
 	}
 
 	wt, err := cl.Worktree()
 	if err != nil {
-		log.Printf("cannot get worktree: %v", err)
-		return nil, err
+		return nil, errors.Wrap(err, "cannot get worktree")
 	}
 
 	gco := &git.CheckoutOptions{
@@ -279,8 +275,7 @@ func (g *repo) GetDocument(id string) (storage.DocTransaction, error) {
 	}
 	err = wt.Checkout(gco)
 	if err != nil {
-		log.Printf("cannot switch branches: %v (b %v)", err, b)
-		return nil, err
+		return nil, errors.Wrap(err, "cannot switch branches")
 	}
 
 	return &transaction{
@@ -319,8 +314,11 @@ func (t *transaction) WriteRootFile(ctx context.Context, name string) (io.WriteC
 		return nil, err
 	}
 
-	h, err := wt.Add(filename)
-	log.Printf("Add %s - %v %s", filename, err, h)
+	_, err = wt.Add(filename)
+	if err != nil {
+		rv.Close()
+		return nil, err
+	}
 
 	return rv, nil
 }
@@ -403,9 +401,6 @@ func (t *transaction) Commit(ctx context.Context, logMessage string) error {
 	if err != nil {
 		return err
 	}
-
-	st, er := wt.Status()
-	log.Printf("git status: %v %v", st, er)
 
 	opts := git.CommitOptions{
 		All: true,
