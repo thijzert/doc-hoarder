@@ -70,6 +70,9 @@
 		while ( srcset != "" ) {
 			let pts = splitFirst(srcset, " ");
 			if ( pts[1] == "" ) {
+				if ( pts[0] != "" ) {
+					rv.push({url: pts[0], spec: null});
+				}
 				break
 			}
 			let url = pts[0];
@@ -238,6 +241,25 @@
 				} catch ( _e ) { console.error("error attaching image", u, _e); }
 			}
 		};
+		let attachImageNode = async (img) => {
+			let i = await tryAttach(img.src);
+			if ( i ) {
+				img.src = i;
+			}
+			let srcset = [];
+			for ( let srcs of parseSrcset(img) ) {
+				let i = await tryAttach(srcs.url);
+				if ( i ) {
+					srcs.url = i;
+				}
+				if ( srcs.spec !== null ) {
+					srcset.push(`${srcs.url} ${srcs.spec}`);
+				} else {
+					srcset.push(srcs.url);
+				}
+			}
+			img.srcset = srcset.join(", ");
+		};
 
 
 
@@ -250,19 +272,10 @@
 				}
 			}
 
-			let i = await tryAttach(img.src);
-			if ( i ) {
-				img.src = i;
-			}
-			let srcset = [];
-			for ( let srcs of parseSrcset(img) ) {
-				let i = await tryAttach(srcs.url);
-				if ( i ) {
-					srcs.url = i;
-				}
-				srcset.push(`${srcs.url} ${srcs.spec}`);
-			}
-			img.srcset = srcset.join(", ");
+			await attachImageNode(img);
+		}
+		for ( let img of doc.querySelectorAll("picture > source") ) {
+			await attachImageNode(img);
 		}
 
 
