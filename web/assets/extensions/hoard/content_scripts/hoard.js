@@ -180,14 +180,14 @@
 		let icon_id = null;
 
 		let imageAttachments = {};
-		let attachImg = async (image_url) => {
+		let attachImg = async (image_url, relative_to = location.href) => {
 			if ( imageAttachments.hasOwnProperty(image_url) ) {
 				return imageAttachments[image_url];
 			}
 			console.log("getting image url ", image_url);
 
 			let att_id = null;
-			let url = new URL(image_url, location.href);
+			let url = new URL(image_url, relative_to);
 
 			if ( url.origin !== location.origin ) {
 				att_id = await postDoc("api/proxy-attachment", {url: url.toString()});
@@ -227,10 +227,10 @@
 
 			return imageAttachments[image_url];
 		};
-		let tryAttach = async (u) => {
+		let tryAttach = async (u, rt = location.href) => {
 			if ( u != "" && u.substr(0,5) != "data:" ) {
 				try {
-					let s = await attachImg(u)
+					let s = await attachImg(u, rt)
 					return s;
 				} catch ( _e ) { console.error("error attaching image", u, _e); }
 			}
@@ -263,7 +263,7 @@
 		}
 
 
-		let attachCSSRule = async (rule) => {
+		let attachCSSRule = async (rule, stylesheet_url) => {
 			if ( rule instanceof CSSImportRule ) {
 				let imp = await attachCSS(rule.styleSheet);
 				// HACK: reference attachments local to attached style sheets
@@ -277,7 +277,7 @@
 						if ( m ) {
 							console.log("attaching", m);
 							resetStyle[k] = rule.style[k];
-							let s = await tryAttach(m[1]);
+							let s = await tryAttach(m[1], stylesheet_url);
 							if ( s ) {
 								// HACK: reference attachments local to attached style sheets
 								if ( s.slice(0,4) == "att/" ) { s = s.slice(4); }
@@ -302,7 +302,7 @@
 			} else if ( rule instanceof CSSMediaRule ) {
 				let rv = `@media ${rule.conditionText} {\n`;
 				for ( let rr of rule.cssRules ) {
-					rv += "    " + await attachCSSRule(rr);
+					rv += "    " + await attachCSSRule(rr, stylesheet_url);
 				}
 				return rv + `}\n`;
 			} else if ( rule instanceof CSSFontFaceRule ) {
@@ -323,7 +323,7 @@
 							srcset = splitFirst(srcset, ")")[1].trim();
 							[format, srcset] = splitFirst(srcset, ",");
 							srcset = srcset.trim();
-							let s = await tryAttach(fontFile);
+							let s = await tryAttach(fontFile, stylesheet_url);
 							if ( s ) {
 								if ( s.slice(0,4) == "att/" ) { s = s.slice(4); }
 								fontFile = s;
@@ -397,7 +397,7 @@
 
 			try {
 				for ( let rule of stylesheet.cssRules ) {
-					attcnt += await attachCSSRule(rule);
+					attcnt += await attachCSSRule(rule, stylesheet_href || location.href);
 				}
 			} catch ( _e ) { console.error(_e); }
 
