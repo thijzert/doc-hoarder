@@ -118,9 +118,16 @@ func (t jankyTransaction) ListAttachments(ctx context.Context) ([]string, error)
 	rv := make([]string, 0, len(contents))
 	for _, fi := range contents {
 		n := fi.Name()
-		if fi.IsDir() && len(n) == 11 && n[0] == 't' {
-			rv = append(rv, n[1:])
+		if fi.IsDir() || len(n) < 12 || n[0] != 't' || n[11] != '.' {
+			continue
 		}
+
+		var id int64
+		var ext string
+		if _, err := fmt.Sscanf(n, "t%010x.%s", &id, &ext); err != nil {
+			continue
+		}
+		rv = append(rv, n[1:11])
 	}
 	return rv, nil
 }
