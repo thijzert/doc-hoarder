@@ -127,7 +127,7 @@ func (t jankyTransaction) ListAttachments(ctx context.Context) ([]string, error)
 		if _, err := fmt.Sscanf(n, "t%010x.%s", &id, &ext); err != nil {
 			continue
 		}
-		rv = append(rv, n[1:11])
+		rv = append(rv, n)
 	}
 	return rv, nil
 }

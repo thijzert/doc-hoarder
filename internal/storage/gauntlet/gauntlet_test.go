@@ -85,7 +85,7 @@ func extractTar(destDir, archiveFileName string) error {
 
 func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 	onlyDocument := "43dbc153e5"
-	onlyAttachment := "7e2d9c3e82"
+	onlyAttachment := "t7e2d9c3e82.css"
 
 	ids, err := r.DocumentIDs(ctx)
 	if err != nil {
@@ -126,7 +126,8 @@ func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 	if err != nil {
 		t.Fatalf("could not create new attachment ID: %v", err)
 	}
-	g, err := trns.WriteAttachment(ctx, "t"+id+".txt")
+	otherAttachment := "t" + id + ".txt"
+	g, err := trns.WriteAttachment(ctx, otherAttachment)
 	if err != nil {
 		t.Fatalf("could not write attachment ID %s: %v", id, err)
 	} else {
@@ -137,8 +138,8 @@ func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 	atts, err = trns.ListAttachments(ctx)
 	if err != nil {
 		t.Fatalf("could not list attachments: %v", err)
-	} else if len(atts) != 2 || atts[0] == atts[1] || (atts[0] != onlyAttachment && atts[1] != onlyAttachment) || (atts[0] != id && atts[1] != id) {
-		t.Errorf("Expected attachments %s and %s; got: %v", onlyAttachment, id, atts)
+	} else if len(atts) != 2 || atts[0] == atts[1] || (atts[0] != onlyAttachment && atts[1] != onlyAttachment) || (atts[0] != otherAttachment && atts[1] != otherAttachment) {
+		t.Errorf("Expected attachments %s and %s; got: %v", onlyAttachment, otherAttachment, atts)
 	}
 	t.Logf("Current attachments: %v", atts)
 
@@ -154,7 +155,7 @@ func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 		t.Logf("Document ID: %s", id)
 	}
 
-	trns, err = r.GetDocument(onlyDocument)
+	trns, err = r.GetDocument(id)
 	if err != nil {
 		t.Fatalf("could not start transaction: %v", err)
 	} else {
