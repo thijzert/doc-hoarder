@@ -332,7 +332,7 @@ func main() {
 		page_url := r.FormValue("page_url")
 
 		docid := ""
-		trns, ok, err := docCache.GetDocumentByURL(ctx, string(user.ID), page_url)
+		trns, ok, err := docCache.GetDocumentByURL(r.Context(), string(user.ID), page_url)
 		if err != nil {
 			log.Printf("Error reusing transaction: %v", err)
 			return nil, err
@@ -340,6 +340,16 @@ func main() {
 		if ok {
 			docid = trns.DocumentID()
 			log.Printf("reused '%s'", docid)
+
+			// Delete all existing attachments
+			atts, err := trns.ListAttachments(r.Context())
+			if err != nil {
+				trns.Rollback()
+				return nil, err
+			}
+			for _, attid := range atts {
+				trns.DeleteAttachment(r.Context(), attid)
+			}
 		} else {
 			docid, err = docStore.NewDocumentID(r.Context())
 			if err != nil {

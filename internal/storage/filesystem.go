@@ -159,6 +159,9 @@ func (t jankyTransaction) WriteAttachment(ctx context.Context, name string) (io.
 	os.MkdirAll(path.Join(t.RootDirectory, "g"+t.DocID, "att"), 0755)
 	return os.Create(path.Join(t.RootDirectory, "g"+t.DocID, "att", name))
 }
+func (t jankyTransaction) DeleteAttachment(ctx context.Context, name string) error {
+	return os.Remove(path.Join(t.RootDirectory, "g"+t.DocID, "att", name))
+}
 
 func (t jankyTransaction) Commit(ctx context.Context, name string) error {
 	return nil

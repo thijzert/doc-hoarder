@@ -30,6 +30,7 @@ type DocTransaction interface {
 	ReadAttachment(context.Context, string) (io.ReadCloser, error)
 	NewAttachmentID(context.Context, string) (string, error)
 	WriteAttachment(context.Context, string) (io.WriteCloser, error)
+	DeleteAttachment(context.Context, string) error
 
 	Commit(context.Context, string) error
 	Rollback() error

@@ -395,6 +395,14 @@ func (t *transaction) WriteAttachment(ctx context.Context, name string) (io.Writ
 	wt.Add(fp)
 	return rv, err
 }
+func (t *transaction) DeleteAttachment(ctx context.Context, name string) error {
+	wt, err := t.clone.Worktree()
+	if err != nil {
+		return err
+	}
+	_, err = wt.Remove(path.Join(t.dir, "att", name))
+	return err
+}
 
 func (t *transaction) Commit(ctx context.Context, logMessage string) error {
 	wt, err := t.clone.Worktree()

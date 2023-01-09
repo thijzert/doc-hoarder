@@ -122,14 +122,14 @@ func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 		t.Errorf("Expected only attachment %s; got: %v", onlyAttachment, atts)
 	}
 
-	id, err := trns.NewAttachmentID(ctx, "txt")
+	attid, err := trns.NewAttachmentID(ctx, "txt")
 	if err != nil {
 		t.Fatalf("could not create new attachment ID: %v", err)
 	}
-	otherAttachment := "t" + id + ".txt"
+	otherAttachment := "t" + attid + ".txt"
 	g, err := trns.WriteAttachment(ctx, otherAttachment)
 	if err != nil {
-		t.Fatalf("could not write attachment ID %s: %v", id, err)
+		t.Fatalf("could not write attachment ID %s: %v", attid, err)
 	} else {
 		fmt.Fprintf(g, "Date: %s", time.Now())
 		g.Close()
@@ -148,7 +148,7 @@ func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 		t.Fatal(err)
 	}
 
-	id, err = r.NewDocumentID(ctx)
+	id, err := r.NewDocumentID(ctx)
 	if err != nil {
 		t.Fatalf("could not generate new document ID: %v", err)
 	} else {
@@ -162,6 +162,13 @@ func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 		t.Logf("transaction: %v", trns)
 	}
 
+	g, err = trns.WriteAttachment(ctx, onlyAttachment)
+	if err != nil {
+		t.Fatalf("could not write attachment ID %s: %v", onlyAttachment, err)
+	} else {
+		fmt.Fprintf(g, "Date: %s", time.Now())
+		g.Close()
+	}
 	g, err = trns.WriteRootFile(ctx, "document.bin")
 	if err != nil {
 		t.Fatalf("could not write root file: %v", err)
@@ -174,6 +181,45 @@ func RunStorageGauntlet(ctx context.Context, t *testing.T, r storage.DocStore) {
 	if err != nil {
 		t.Fatalf("could not commit transaction: %v", err)
 	}
+
+	// Try deleting an attachment
+	trns, err = r.GetDocument(id)
+	if err != nil {
+		t.Fatalf("could not start transaction: %v", err)
+	}
+	atts, err = trns.ListAttachments(ctx)
+	if err != nil {
+		t.Fatalf("could not list attachments: %v", err)
+	} else if len(atts) != 1 || atts[0] != onlyAttachment {
+		t.Errorf("Expected only attachment %s; got: %v", onlyAttachment, atts)
+	}
+	err = trns.DeleteAttachment(ctx, onlyAttachment)
+	if err != nil {
+		t.Fatalf("could not delete attachment: %v", err)
+	}
+	atts, err = trns.ListAttachments(ctx)
+	if err != nil {
+		t.Fatalf("could not list attachments: %v", err)
+	} else if len(atts) != 0 {
+		t.Errorf("Expected no attachments; got: %v", atts)
+	}
+	err = trns.Commit(ctx, "Remove stylesheet")
+	if err != nil {
+		t.Fatalf("could not commit transaction: %v", err)
+	}
+
+	// Check that the deletion was permanent
+	trns, err = r.GetDocument(id)
+	if err != nil {
+		t.Fatalf("could not start transaction: %v", err)
+	}
+	atts, err = trns.ListAttachments(ctx)
+	if err != nil {
+		t.Fatalf("could not list attachments: %v", err)
+	} else if len(atts) != 0 {
+		t.Errorf("Expected no attachments; got: %v", atts)
+	}
+	trns.Rollback()
 
 	t.Logf("oh hey it's working")
 }
