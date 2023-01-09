@@ -88,6 +88,29 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	cmdlineArgs := cmdline.Args()
+	if len(cmdlineArgs) == 2 && cmdlineArgs[0] == "import" {
+		// Open a second document store, import all documents into the main store, and exit
+
+		if cmdlineArgs[1] == docStoreLocation {
+			log.Fatal("Cannot import a document store into itself")
+		}
+
+		importDocs, err := storage.GetDocStore(cmdlineArgs[1])
+		if err != nil {
+			log.Fatalf("Unable to read source store: %v", err)
+		}
+
+		err = storage.Copy(ctx, docStore, importDocs)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return
+	}
+
+	// Default behaviour: open a web server
+
 	// Clean out old stale sessions from the store
 	go func(ctx context.Context) {
 		tick := time.NewTicker(10 * time.Minute)

@@ -75,9 +75,6 @@ func (jfs jankyFS) GetDocument(docID string) (DocTransaction, error) {
 	if len(docID) != 10 {
 		return nil, fmt.Errorf("invalid document ID")
 	}
-	if fi, err := os.Stat(path.Join(jfs.RootDirectory, "g"+docID)); err != nil || !fi.IsDir() {
-		return nil, fmt.Errorf("invalid document ID")
-	}
 
 	return jankyTransaction{
 		RootDirectory: jfs.RootDirectory,
@@ -98,6 +95,7 @@ func (t jankyTransaction) ReadRootFile(ctx context.Context, name string) (io.Rea
 	return os.Open(path.Join(t.RootDirectory, "g"+t.DocID, name))
 }
 func (t jankyTransaction) WriteRootFile(ctx context.Context, name string) (io.WriteCloser, error) {
+	os.MkdirAll(path.Join(t.RootDirectory, "g"+t.DocID), 0755)
 	return os.Create(path.Join(t.RootDirectory, "g"+t.DocID, name))
 }
 

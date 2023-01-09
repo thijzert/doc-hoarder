@@ -70,6 +70,87 @@ func GetDocStore(descriptor string) (DocStore, error) {
 	return nil, fmt.Errorf("storage backend '%s' not registered", name)
 }
 
+func Copy(ctx context.Context, target, source DocStore) error {
+	ids, err := source.DocumentIDs(ctx)
+	if err != nil {
+		return err
+	}
+
+	rootFiles := []string{"document.bin", "meta.xml"}
+
+	for _, id := range ids {
+		err = func(id string) error {
+			trnsSrc, err := source.GetDocument(id)
+			if err != nil {
+				return err
+			}
+			defer trnsSrc.Rollback()
+
+			trnsTgt, err := target.GetDocument(id)
+			if err != nil {
+				return err
+			}
+			commit := false
+			defer func() {
+				if commit {
+					trnsTgt.Commit(ctx, "import from external store")
+				} else {
+					trnsTgt.Rollback()
+				}
+			}()
+
+			// TODO: range over all root files, not just the ones I remembered to mention in the list above
+			for _, rf := range rootFiles {
+				g, err := trnsTgt.WriteRootFile(ctx, rf)
+				if err != nil {
+					return err
+				}
+				f, err := trnsSrc.ReadRootFile(ctx, rf)
+				if err != nil {
+					g.Close()
+					return err
+				}
+				_, err = io.Copy(g, f)
+				f.Close()
+				g.Close()
+				if err != nil {
+					return err
+				}
+			}
+
+			atts, err := trnsSrc.ListAttachments(ctx)
+			if err != nil {
+				return err
+			}
+
+			for _, att := range atts {
+				g, err := trnsTgt.WriteAttachment(ctx, att)
+				if err != nil {
+					return err
+				}
+				f, err := trnsSrc.ReadAttachment(ctx, att)
+				if err != nil {
+					g.Close()
+					return err
+				}
+				_, err = io.Copy(g, f)
+				f.Close()
+				g.Close()
+				if err != nil {
+					return err
+				}
+			}
+
+			commit = true
+			return nil
+		}(id)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type ExtensionKnower interface {
 	AttachmentNameFromID(context.Context, string) (string, error)
 }

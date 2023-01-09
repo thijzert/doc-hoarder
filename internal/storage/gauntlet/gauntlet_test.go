@@ -15,10 +15,12 @@ import (
 	_ "github.com/thijzert/doc-hoarder/internal/storage/gitstore"
 )
 
+var gauntletSchemes []string = []string{"fs", "git"}
+
 func TestStorageGauntlet(t *testing.T) {
 	ctx := context.Background()
 
-	for _, scheme := range []string{"fs", "git"} {
+	for _, scheme := range gauntletSchemes {
 		t.Run(scheme, func(t *testing.T) {
 			dir := t.TempDir()
 			err := extractTar(dir, "testdata/"+scheme+".tar")
