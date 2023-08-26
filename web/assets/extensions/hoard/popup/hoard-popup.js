@@ -62,7 +62,7 @@ const listenForClicks = () => {
 				body: form
 			});
 			let who = await resp.json();
-			if ( who.hello ) {
+			if ( who.ok ) {
 				apikeyStatus.innerText = `\u2713 Hi ${who.hello}`;
 			} else {
 				apikeyStatus.innerText = `\u274c`;

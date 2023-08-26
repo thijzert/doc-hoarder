@@ -310,9 +310,17 @@ func main() {
 
 	mux.Handle("/api/user/whoami", mustKey(plumbing.AsJSON(plumbing.HandlerFunc(func(r *http.Request) (interface{}, error) {
 		user, _ := login.GetUser(r)
-		return struct {
+		rv := struct {
+			Ok int `json:"ok"`
 			Hello string `json:"hello"`
-		}{user.GivenName}, nil
+		}{1, user.GivenName}
+		if rv.Hello == "" {
+			rv.Hello = user.FullName
+		}
+		if rv.Hello == "" {
+			rv.Hello = "dear user"
+		}
+		return rv, nil
 	})), ""))
 
 	var txmu sync.Mutex
